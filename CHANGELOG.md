@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.5.0-beta.3 — 2026-10-10
+
+- Replace misleading fixed touch action names with native A/B/X/Y letters.
+- Replace nine-cell touch movement with eight angular directions and a smaller
+  circular dead zone. Capture the movement thumb by device/finger identity until
+  release, preserving movement beyond the artwork and across multitouch reorder.
+- Show all eight directions, the active sector and a moving thumb indicator;
+  clear captured movement when hiding, disabling, rotating or suspending.
+
 ## 0.5.0-beta.2 — 2026-10-10
 
 - Add persistent Classic / Tactical 80% / Tactical Wide 67% camera choices for

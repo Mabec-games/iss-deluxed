@@ -1166,11 +1166,16 @@ static int IssdWsExtraForAspect(void);
  * rather than trying to track down/up transitions ourselves. */
 static void PumpTouchState(void) {
     if (!g_window || !issd_touch_enabled()) return;
+    static int previous_w, previous_h;
     int win_w = 0, win_h = 0;
     SDL_GetWindowSize(g_window, &win_w, &win_h);
+    if (previous_w && previous_h && (previous_w != win_w || previous_h != win_h))
+        g_touch_release_guard = true;
+    previous_w = win_w; previous_h = win_h;
     issd_touch_set_viewport(win_w, win_h);
 
-    int xs[10], ys[10], n = 0;
+    IssdTouchPoint points[10];
+    int n = 0;
     const int devices = SDL_GetNumTouchDevices();
     for (int d = 0; d < devices && n < 10; d++) {
         const SDL_TouchID id = SDL_GetTouchDevice(d);
@@ -1178,8 +1183,10 @@ static void PumpTouchState(void) {
         for (int f = 0; f < fingers && n < 10; f++) {
             SDL_Finger *finger = SDL_GetTouchFinger(id, f);
             if (!finger) continue;
-            xs[n] = (int)(finger->x * (float)win_w);
-            ys[n] = (int)(finger->y * (float)win_h);
+            points[n].device = (int64_t)id;
+            points[n].finger = (int64_t)finger->id;
+            points[n].x = (int)(finger->x * (float)win_w);
+            points[n].y = (int)(finger->y * (float)win_h);
             n++;
         }
     }
@@ -1188,7 +1195,7 @@ static void PumpTouchState(void) {
         if (n) return;
         g_touch_release_guard = false;
     }
-    issd_touch_set_points(xs, ys, n);
+    issd_touch_set_fingers(points, n);
 
     if (issd_touch_take_menu_press()) issd_menu_toggle();
 
@@ -1412,94 +1419,62 @@ static void RenderTouchOverlay(SDL_Renderer *renderer) {
         if (!r->visible) continue;
 
         if (i == ISSD_TOUCH_DPAD) {
-            /* Authentic SNES Cross D-Pad */
-            const int aw = r->w / 3;
-            const int ah = r->h / 3;
-            const int cx = r->x + r->w / 2;
-            const int cy = r->y + r->h / 2;
-
-            /* Base cross shapes */
-            SDL_Rect h_bar = { r->x, r->y + ah, r->w, ah };
-            SDL_Rect v_bar = { r->x + aw, r->y, aw, r->h };
-
-            SDL_SetRenderDrawColor(renderer, 30, 35, 45, 180);
-            SDL_RenderFillRect(renderer, &h_bar);
-            SDL_RenderFillRect(renderer, &v_bar);
-
-            /* Directional active arms / glow */
-            if (pad_mask & ISSD_PAD_UP) {
-                SDL_Rect up_bar = { r->x + aw, r->y, aw, ah };
-                SDL_SetRenderDrawColor(renderer, 80, 160, 240, 220);
-                SDL_RenderFillRect(renderer, &up_bar);
+            const int cx = r->x + r->w / 2, cy = r->y + r->h / 2;
+            const int radius = (r->w < r->h ? r->w : r->h) / 2;
+            SDL_Rect base = {r->x, r->y, r->w, r->h};
+            TouchDrawRoundedRect(renderer, &base, radius / 3,
+                                 25, 32, 44, 155, true);
+            TouchDrawRoundedRect(renderer, &base, radius / 3,
+                                 130, 160, 190, 210, false);
+            /* Every available direction has its own visible sector and arrow. */
+            static const uint16_t directions[8] = {
+                ISSD_PAD_RIGHT, ISSD_PAD_RIGHT | ISSD_PAD_DOWN, ISSD_PAD_DOWN,
+                ISSD_PAD_DOWN | ISSD_PAD_LEFT, ISSD_PAD_LEFT,
+                ISSD_PAD_LEFT | ISSD_PAD_UP, ISSD_PAD_UP, ISSD_PAD_UP | ISSD_PAD_RIGHT
+            };
+            const uint16_t movement = pad_mask &
+                (ISSD_PAD_UP | ISSD_PAD_DOWN | ISSD_PAD_LEFT | ISSD_PAD_RIGHT);
+            for (int sector = 0; sector < 8; ++sector) {
+                const float angle = sector * 0.785398163f;
+                const float dx = cosf(angle), dy = sinf(angle);
+                const bool active = movement == directions[sector];
+                if (active) {
+                    const float a0 = angle - 0.392699082f, a1 = angle + 0.392699082f;
+                    TouchDrawTriangle(renderer, cx, cy,
+                        cx + (int)(cosf(a0) * r->w * 0.47f),
+                        cy + (int)(sinf(a0) * r->h * 0.47f),
+                        cx + (int)(cosf(a1) * r->w * 0.47f),
+                        cy + (int)(sinf(a1) * r->h * 0.47f), 65, 155, 240, 195);
+                }
+                const int ax = cx + (int)(dx * r->w * 0.37f);
+                const int ay = cy + (int)(dy * r->h * 0.37f);
+                const float tip = radius * 0.10f, half = radius * 0.06f;
+                TouchDrawTriangle(renderer,
+                    ax + (int)(dx * tip), ay + (int)(dy * tip),
+                    ax - (int)(dx * tip + dy * half), ay - (int)(dy * tip - dx * half),
+                    ax - (int)(dx * tip - dy * half), ay - (int)(dy * tip + dx * half),
+                    240, 245, 255, active ? 255 : 170);
             }
-            if (pad_mask & ISSD_PAD_DOWN) {
-                SDL_Rect dn_bar = { r->x + aw, r->y + 2 * ah, aw, ah };
-                SDL_SetRenderDrawColor(renderer, 80, 160, 240, 220);
-                SDL_RenderFillRect(renderer, &dn_bar);
+            TouchDrawCircleOutline(renderer, cx, cy, radius * 16 / 100, 1,
+                                   140, 170, 200, 160);
+            int tx = cx, ty = cy;
+            const bool held = issd_touch_thumb(&tx, &ty);
+            if (held) {
+                float nx = (tx - (float)cx) / (r->w * 0.5f);
+                float ny = (ty - (float)cy) / (r->h * 0.5f);
+                float length = sqrtf(nx * nx + ny * ny);
+                if (length > 0.68f) { nx *= 0.68f / length; ny *= 0.68f / length; }
+                tx = cx + (int)(nx * r->w * 0.5f);
+                ty = cy + (int)(ny * r->h * 0.5f);
             }
-            if (pad_mask & ISSD_PAD_LEFT) {
-                SDL_Rect lf_bar = { r->x, r->y + ah, aw, ah };
-                SDL_SetRenderDrawColor(renderer, 80, 160, 240, 220);
-                SDL_RenderFillRect(renderer, &lf_bar);
-            }
-            if (pad_mask & ISSD_PAD_RIGHT) {
-                SDL_Rect rt_bar = { r->x + 2 * aw, r->y + ah, aw, ah };
-                SDL_SetRenderDrawColor(renderer, 80, 160, 240, 220);
-                SDL_RenderFillRect(renderer, &rt_bar);
-            }
-
-            /* Cross outline */
-            SDL_SetRenderDrawColor(renderer, 100, 110, 130, 220);
-            /* Top edge */
-            SDL_RenderDrawLine(renderer, r->x + aw, r->y, r->x + 2 * aw, r->y);
-            /* Top-right notch */
-            SDL_RenderDrawLine(renderer, r->x + 2 * aw, r->y, r->x + 2 * aw, r->y + ah);
-            SDL_RenderDrawLine(renderer, r->x + 2 * aw, r->y + ah, r->x + r->w, r->y + ah);
-            /* Right edge */
-            SDL_RenderDrawLine(renderer, r->x + r->w, r->y + ah, r->x + r->w, r->y + 2 * ah);
-            /* Bottom-right notch */
-            SDL_RenderDrawLine(renderer, r->x + r->w, r->y + 2 * ah, r->x + 2 * aw, r->y + 2 * ah);
-            SDL_RenderDrawLine(renderer, r->x + 2 * aw, r->y + 2 * ah, r->x + 2 * aw, r->y + r->h);
-            /* Bottom edge */
-            SDL_RenderDrawLine(renderer, r->x + 2 * aw, r->y + r->h, r->x + aw, r->y + r->h);
-            /* Bottom-left notch */
-            SDL_RenderDrawLine(renderer, r->x + aw, r->y + r->h, r->x + aw, r->y + 2 * ah);
-            SDL_RenderDrawLine(renderer, r->x + aw, r->y + 2 * ah, r->x, r->y + 2 * ah);
-            /* Left edge */
-            SDL_RenderDrawLine(renderer, r->x, r->y + 2 * ah, r->x, r->y + ah);
-            /* Top-left notch */
-            SDL_RenderDrawLine(renderer, r->x, r->y + ah, r->x + aw, r->y + ah);
-            SDL_RenderDrawLine(renderer, r->x + aw, r->y + ah, r->x + aw, r->y);
-
-            /* Center pivot dimple */
-            TouchDrawFilledCircle(renderer, cx, cy, aw / 4, 20, 25, 30, 220);
-            TouchDrawCircleOutline(renderer, cx, cy, aw / 4, 1, 70, 80, 100, 200);
-
-            /* Directional chevrons / arrows */
-            const int tri_s = aw / 4;
-            /* UP */
-            TouchDrawTriangle(renderer, cx, (int)(r->y + ah * 0.3f),
-                              cx - tri_s, (int)(r->y + ah * 0.75f),
-                              cx + tri_s, (int)(r->y + ah * 0.75f),
-                              255, 255, 255, (pad_mask & ISSD_PAD_UP) ? 255 : 180);
-            /* DOWN */
-            TouchDrawTriangle(renderer, cx, (int)(r->y + r->h - ah * 0.3f),
-                              cx - tri_s, (int)(r->y + r->h - ah * 0.75f),
-                              cx + tri_s, (int)(r->y + r->h - ah * 0.75f),
-                              255, 255, 255, (pad_mask & ISSD_PAD_DOWN) ? 255 : 180);
-            /* LEFT */
-            TouchDrawTriangle(renderer, (int)(r->x + aw * 0.3f), cy,
-                              (int)(r->x + aw * 0.75f), cy - tri_s,
-                              (int)(r->x + aw * 0.75f), cy + tri_s,
-                              255, 255, 255, (pad_mask & ISSD_PAD_LEFT) ? 255 : 180);
-            /* RIGHT */
-            TouchDrawTriangle(renderer, (int)(r->x + r->w - aw * 0.3f), cy,
-                              (int)(r->x + r->w - aw * 0.75f), cy - tri_s,
-                              (int)(r->x + r->w - aw * 0.75f), cy + tri_s,
-                              255, 255, 255, (pad_mask & ISSD_PAD_RIGHT) ? 255 : 180);
+            TouchDrawFilledCircle(renderer, tx, ty, radius / 5,
+                                  held ? 100 : 60, held ? 190 : 85, held ? 255 : 115,
+                                  held ? 220 : 135);
+            TouchDrawCircleOutline(renderer, tx, ty, radius / 5, 2,
+                                   210, 235, 255, held ? 240 : 140);
 
         } else if (r->round) {
-            /* Circular face button with authentic SNES coloring, letter, and action sublabel */
+            /* Native button letters stay accurate across gameplay/control modes. */
             const int cx = r->x + r->w / 2;
             const int cy = r->y + r->h / 2;
             const int rad = r->w / 2;

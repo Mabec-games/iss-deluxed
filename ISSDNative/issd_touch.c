@@ -9,6 +9,9 @@ static struct {
     int           vw, vh;
     IssdTouchRect r[ISSD_TOUCH_COUNT];
     int           px[MAX_POINTS], py[MAX_POINTS], pn;
+    bool          thumb_held;
+    int64_t       thumb_device, thumb_finger;
+    int           thumb_x, thumb_y;
     uint16_t      mask;
     bool          menu_down, menu_fired, hide_down;
     bool          screen_touch_down, screen_tap_fired;
@@ -63,10 +66,10 @@ static void compute_layout(void) {
     const int fy = height - edge - unit * 3 - gap * 2;
     const int cx = fx + unit + gap;
     const int cy = fy + unit + gap;
-    place(ISSD_TOUCH_Y, fx,              cy,              unit, unit, true, "Y", "DASH",  46, 204, 113); /* SNES Green */
-    place(ISSD_TOUCH_X, cx,              fy,              unit, unit, true, "X", "THRU",  52, 152, 219); /* SNES Blue */
-    place(ISSD_TOUCH_A, cx + unit + gap, cy,              unit, unit, true, "A", "SHOOT", 231, 76, 60);  /* SNES Red */
-    place(ISSD_TOUCH_B, cx,              cy + unit + gap, unit, unit, true, "B", "PASS",  241, 196, 15); /* SNES Yellow */
+    place(ISSD_TOUCH_Y, fx,              cy,              unit, unit, true, "Y", NULL, 46, 204, 113);
+    place(ISSD_TOUCH_X, cx,              fy,              unit, unit, true, "X", NULL, 52, 152, 219);
+    place(ISSD_TOUCH_A, cx + unit + gap, cy,              unit, unit, true, "A", NULL, 231, 76, 60);
+    place(ISSD_TOUCH_B, cx,              cy + unit + gap, unit, unit, true, "B", NULL, 241, 196, 15);
 
     /* Shoulders along the top, clear of the face cluster. */
     place(ISSD_TOUCH_L, edge,                    edge, unit * 2, small, false, "L", NULL, 150, 155, 165);
@@ -108,6 +111,7 @@ static void compute_layout(void) {
 
 void issd_touch_reset_points(void) {
     T.pn = 0; T.mask = 0;
+    T.thumb_held = false;
     memset(T.px, 0, sizeof(T.px)); memset(T.py, 0, sizeof(T.py));
     T.menu_down = T.menu_fired = T.hide_down = false;
     T.screen_touch_down = T.screen_tap_fired = false;
@@ -152,16 +156,61 @@ bool issd_touch_center(int control, int *x, int *y) {
     return true;
 }
 
-void issd_touch_set_enabled(bool enabled) { T.enabled = enabled; }
+void issd_touch_set_enabled(bool enabled) {
+    if (T.enabled != enabled) issd_touch_reset_points();
+    T.enabled = enabled;
+}
 bool issd_touch_enabled(void) { return T.enabled; }
 bool issd_touch_pad_visible(void) { return T.pad_visible; }
-void issd_touch_set_pad_visible(bool visible) { T.pad_visible = visible; }
+void issd_touch_set_pad_visible(bool visible) {
+    if (T.pad_visible != visible) issd_touch_reset_points();
+    T.pad_visible = visible;
+}
 
 void issd_touch_set_points(const int *xs, const int *ys, int count) {
+    IssdTouchPoint points[MAX_POINTS];
+    if (!xs || !ys || count < 0) count = 0;
+    if (count > MAX_POINTS) count = MAX_POINTS;
+    for (int i = 0; i < count; ++i)
+        points[i] = (IssdTouchPoint){0, i, xs[i], ys[i]};
+    issd_touch_set_fingers(points, count);
+}
+
+bool issd_touch_thumb(int *x, int *y) {
+    if (!T.enabled || !T.pad_visible || !T.thumb_held) return false;
+    if (x) *x = T.thumb_x;
+    if (y) *y = T.thumb_y;
+    return true;
+}
+
+static uint16_t thumb_direction(const IssdTouchRect *d, int x, int y) {
+    /* Normalize both axes so resized/non-square pads retain 45-degree sectors.
+     * Eight equal angular sectors; the centre radius is 8% of the diameter.
+     * 414/1000 approximates tan(22.5 degrees) without libm or squared overflow. */
+    int64_t dx = ((int64_t)x*2 - (int64_t)d->x*2 - d->w)*1000/d->w;
+    int64_t dy = ((int64_t)y*2 - (int64_t)d->y*2 - d->h)*1000/d->h;
+    int64_t ax = dx < 0 ? -dx : dx, ay = dy < 0 ? -dy : dy;
+    if (ax <= 160 && ay <= 160 && ax*ax+ay*ay <= 160*160) return 0;
+    uint16_t mask = 0;
+    if (ax*1000 >= ay*414) mask |= dx < 0 ? ISSD_PAD_LEFT : ISSD_PAD_RIGHT;
+    if (ay*1000 >= ax*414) mask |= dy < 0 ? ISSD_PAD_UP : ISSD_PAD_DOWN;
+    return mask;
+}
+
+void issd_touch_set_fingers(const IssdTouchPoint *points, int count) {
+    if (!points) count = 0;
     if (count < 0) count = 0;
     if (count > MAX_POINTS) count = MAX_POINTS;
     T.pn = count;
-    for (int i = 0; i < count; i++) { T.px[i] = xs[i]; T.py[i] = ys[i]; }
+    for (int i = 0; i < count; i++) { T.px[i] = points[i].x; T.py[i] = points[i].y; }
+
+    if (T.thumb_held) {
+        bool present = false;
+        for (int i = 0; i < count; ++i)
+            if (points[i].device == T.thumb_device && points[i].finger == T.thumb_finger)
+                present = true;
+        if (!present || !T.pad_visible || !T.enabled) T.thumb_held = false;
+    }
 
     for (int i = 0; i < ISSD_TOUCH_COUNT; i++) T.r[i].pressed = false;
     T.mask = 0;
@@ -175,6 +224,17 @@ void issd_touch_set_points(const int *xs, const int *ys, int count) {
     for (int i = 0; i < count; i++) {
         const int x = T.px[i], y = T.py[i];
         bool control_hit = false;
+
+        /* The captured thumb is reserved for movement. Sliding onto Menu or a
+         * face button must not accidentally activate it. */
+        if (T.thumb_held && points[i].device == T.thumb_device &&
+            points[i].finger == T.thumb_finger) {
+            T.thumb_x = x; T.thumb_y = y;
+            uint16_t direction = thumb_direction(&T.r[ISSD_TOUCH_DPAD], x, y);
+            T.mask |= direction;
+            T.r[ISSD_TOUCH_DPAD].pressed = direction != 0;
+            continue;
+        }
 
         /* The menu and hide/show buttons are live whether or not the pad is hidden. */
         if (hit_padded(&T.r[ISSD_TOUCH_MENU], x, y, pad_margin)) {
@@ -191,17 +251,17 @@ void issd_touch_set_points(const int *xs, const int *ys, int count) {
         }
 
         if (T.pad_visible) {
-            /* D-pad as a 3x3: the centre cell presses nothing, edges press one
-             * direction, corners press two so diagonals work. */
             const IssdTouchRect *d = &T.r[ISSD_TOUCH_DPAD];
             if (hit(d, x, y)) {
-                const int col = (int)((int64_t)(x - d->x) * 3 / d->w);
-                const int row = (int)((int64_t)(y - d->y) * 3 / d->h);
-                if (col == 0) T.mask |= ISSD_PAD_LEFT;
-                else if (col == 2) T.mask |= ISSD_PAD_RIGHT;
-                if (row == 0) T.mask |= ISSD_PAD_UP;
-                else if (row == 2) T.mask |= ISSD_PAD_DOWN;
-                if (T.mask) T.r[ISSD_TOUCH_DPAD].pressed = true;
+                if (!T.thumb_held) {
+                    T.thumb_held = true;
+                    T.thumb_device = points[i].device;
+                    T.thumb_finger = points[i].finger;
+                    T.thumb_x = x; T.thumb_y = y;
+                    uint16_t direction = thumb_direction(d, x, y);
+                    T.mask |= direction;
+                    T.r[ISSD_TOUCH_DPAD].pressed = direction != 0;
+                }
                 control_hit = true;
                 continue;
             }
@@ -242,7 +302,14 @@ void issd_touch_set_points(const int *xs, const int *ys, int count) {
 
     /* Both toggles fire on release, so a finger held down does not repeat. */
     if (!menu_now && T.menu_down) T.menu_fired = true;
-    if (!hide_now && T.hide_down) T.pad_visible = !T.pad_visible;
+    if (!hide_now && T.hide_down) {
+        T.pad_visible = !T.pad_visible;
+        if (!T.pad_visible) {
+            T.thumb_held = false;
+            T.mask = 0;
+            for (int i = 0; i < ISSD_TOUCH_COUNT; ++i) T.r[i].pressed = false;
+        }
+    }
     T.menu_down = menu_now;
     T.hide_down = hide_now;
 }

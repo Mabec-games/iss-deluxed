@@ -29,7 +29,8 @@ def touch_layout(tmp_path_factory):
 
 @pytest.mark.parametrize("case", ["default","moved","scaled","rotation","bounds","invalid",
                                  "reset","layout-reset","viewport-reset","same-config","extreme-dpad",
-                                 "center","unknown-center"])
+                                 "center","unknown-center","thumb-pad","honest-labels",
+                                 "finger-identity","capture-safety","angular-sectors"])
 def test_touch_layout(touch_layout,case):
     result = subprocess.run([str(touch_layout),case],capture_output=True,text=True)
     assert result.returncode == 0, result.stdout + result.stderr

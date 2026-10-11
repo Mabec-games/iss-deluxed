@@ -164,6 +164,85 @@ static void center(void) {
         assert(x >= 0 && x <= 1000 && y >= 0 && y <= 1000);
     }
 }
+static void thumb_pad(void) {
+    const IssdTouchRect *d = &rects()[ISSD_TOUCH_DPAD];
+    int cx = d->x+d->w/2, cy = d->y+d->h/2;
+    /* A small intentional movement must escape the old oversized grid centre. */
+    assert(hold(cx+d->w/8,cy) == ISSD_PAD_RIGHT);
+    assert(hold(cx+d->w/8,cy-d->h/8) == (ISSD_PAD_RIGHT|ISSD_PAD_UP));
+    /* Sliding well beyond the artwork keeps the same thumb controlling motion. */
+    assert(hold(d->x+d->w+80,cy) == ISSD_PAD_RIGHT);
+    assert(!issd_touch_take_screen_tap(NULL,NULL));
+    issd_touch_set_points(NULL,NULL,0);
+    assert(issd_touch_pad_mask() == 0);
+    /* A fresh touch outside must not acquire the D-pad. */
+    assert(hold(d->x+d->w+80,cy) == 0);
+    assert(issd_touch_take_screen_tap(NULL,NULL));
+}
+static void honest_labels(void) {
+    const IssdTouchRect *r = rects();
+    static const char *letters[] = {"A","B","X","Y"};
+    for (int i=0;i<4;++i) {
+        assert(!strcmp(r[ISSD_TOUCH_A+i].label,letters[i]));
+        assert(!r[ISSD_TOUCH_A+i].sublabel);
+    }
+}
+static void finger_identity(void) {
+    const IssdTouchRect *r = rects(), *d = &r[ISSD_TOUCH_DPAD];
+    int cx=d->x+d->w/2, cy=d->y+d->h/2;
+    IssdTouchPoint p[] = {{1,20,r[ISSD_TOUCH_A].x+r[ISSD_TOUCH_A].w/2,
+                         r[ISSD_TOUCH_A].y+r[ISSD_TOUCH_A].h/2},
+                         {1,10,cx+d->w/3,cy}};
+    issd_touch_set_fingers(p,2);
+    assert(issd_touch_pad_mask() == (ISSD_PAD_A|ISSD_PAD_RIGHT));
+    /* SDL compacts/reorders its finger array when the action finger lifts. */
+    p[1].x = d->x+d->w+80;
+    issd_touch_set_fingers(p+1,1);
+    assert(issd_touch_pad_mask() == ISSD_PAD_RIGHT);
+    assert(!issd_touch_take_screen_tap(NULL,NULL));
+    int x,y;
+    assert(issd_touch_thumb(&x,&y) && x==p[1].x && y==cy);
+    /* A different device with the same finger number cannot impersonate it. */
+    p[1].device=2;
+    issd_touch_set_fingers(p+1,1);
+    assert(!issd_touch_thumb(NULL,NULL));
+    assert(issd_touch_pad_mask()==0);
+}
+static void capture_safety(void) {
+    const IssdTouchRect *r=rects(), *d=&r[ISSD_TOUCH_DPAD];
+    IssdTouchPoint p={1,10,d->x+d->w-1,d->y+d->h/2};
+    issd_touch_set_fingers(&p,1);
+    p.x=r[ISSD_TOUCH_MENU].x+r[ISSD_TOUCH_MENU].w/2;
+    p.y=r[ISSD_TOUCH_MENU].y+r[ISSD_TOUCH_MENU].h/2;
+    issd_touch_set_fingers(&p,1);
+    issd_touch_set_fingers(NULL,0);
+    assert(!issd_touch_take_menu_press());
+    assert(!issd_touch_take_screen_tap(NULL,NULL));
+    p.x=d->x+d->w-1; p.y=d->y+d->h/2;
+    issd_touch_set_fingers(&p,1);
+    issd_touch_set_pad_visible(false);
+    assert(!issd_touch_thumb(NULL,NULL) && issd_touch_pad_mask()==0);
+    issd_touch_set_pad_visible(true);
+    assert(issd_touch_pad_mask()==0);
+    issd_touch_set_fingers(&p,1);
+    issd_touch_set_enabled(false);
+    issd_touch_set_enabled(true);
+    assert(!issd_touch_thumb(NULL,NULL) && issd_touch_pad_mask()==0);
+}
+static void angular_sectors(void) {
+    const IssdTouchRect *d=&rects()[ISSD_TOUCH_DPAD];
+    int cx=d->x+d->w/2, cy=d->y+d->h/2;
+    static const int offsets[][3] = {{100,-30,ISSD_PAD_RIGHT},
+        {100,-60,ISSD_PAD_RIGHT|ISSD_PAD_UP},{60,-100,ISSD_PAD_RIGHT|ISSD_PAD_UP},
+        {30,-100,ISSD_PAD_UP},{-100,30,ISSD_PAD_LEFT},
+        {-100,60,ISSD_PAD_LEFT|ISSD_PAD_DOWN},{-30,100,ISSD_PAD_DOWN},
+        {100,100,ISSD_PAD_RIGHT|ISSD_PAD_DOWN},{-100,-100,ISSD_PAD_LEFT|ISSD_PAD_UP},
+        {5,5,0}};
+    for (unsigned i=0;i<sizeof(offsets)/sizeof(offsets[0]);++i)
+        assert(hold(cx+offsets[i][0],cy+offsets[i][1])==offsets[i][2]);
+    issd_touch_set_points(NULL,NULL,0);
+    assert(!issd_touch_thumb(NULL,NULL));
+}
 int main(int argc,char **argv) {
     assert(argc == 2);
     if (!strcmp(argv[1],"unknown-center")) {
@@ -185,6 +264,11 @@ int main(int argc,char **argv) {
     else if (!strcmp(argv[1],"viewport-reset")) clear_held(false,true);
     else if (!strcmp(argv[1],"same-config")) same_config();
     else if (!strcmp(argv[1],"center")) center();
+    else if (!strcmp(argv[1],"thumb-pad")) thumb_pad();
+    else if (!strcmp(argv[1],"honest-labels")) honest_labels();
+    else if (!strcmp(argv[1],"finger-identity")) finger_identity();
+    else if (!strcmp(argv[1],"capture-safety")) capture_safety();
+    else if (!strcmp(argv[1],"angular-sectors")) angular_sectors();
     else assert(0);
     puts("touch layout case passed"); return 0;
 }

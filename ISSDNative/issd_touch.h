@@ -5,7 +5,7 @@
 /* On-screen gamepad for touch devices.
  *
  * Deliberately free of SDL and of Android: it takes a viewport size and
- * normalised touch points, and returns a SNES joypad mask plus a list of
+ * touch points in viewport pixels, and returns a SNES joypad mask plus a list of
  * rectangles to draw. That keeps the hit-testing, the auto-hide rules and the
  * layout arithmetic testable on the desktop, where there is no touchscreen,
  * rather than only on a device.
@@ -35,11 +35,11 @@ enum {
 };
 
 typedef enum {
-    ISSD_TOUCH_DPAD = 0,   /* one control, four directions, 9-way hit test */
+    ISSD_TOUCH_DPAD = 0,   /* eight-direction thumb pad */
     ISSD_TOUCH_A, ISSD_TOUCH_B, ISSD_TOUCH_X, ISSD_TOUCH_Y,
     ISSD_TOUCH_L, ISSD_TOUCH_R,
     ISSD_TOUCH_START, ISSD_TOUCH_SELECT,
-    ISSD_TOUCH_HIDE,       /* toggles the pad; hides with it */
+    ISSD_TOUCH_HIDE,       /* toggles the pad; remains accessible */
     ISSD_TOUCH_MENU,       /* opens the overlay menu; NEVER hidden */
     ISSD_TOUCH_COUNT
 } IssdTouchControl;
@@ -50,9 +50,22 @@ typedef struct {
     bool visible;          /* false while the pad is hidden */
     bool pressed;
     const char *label;
-    const char *sublabel;  /* action name e.g. "SHOOT", "PASS", "DASH", "THRU" */
+    const char *sublabel;  /* optional secondary label */
     uint8_t color_r, color_g, color_b;
 } IssdTouchRect;
+
+typedef struct {
+    int64_t device, finger; /* Stable identity, independent of array order. */
+    int x, y;
+} IssdTouchPoint;
+
+/* Captures the first finger touching the D-pad until that finger lifts, even
+ * beyond the drawn pad. Other fingers can press action buttons simultaneously.
+ * Device and finger IDs must remain stable for a contact's lifetime. */
+void issd_touch_set_fingers(const IssdTouchPoint *points, int count);
+
+/* Current captured thumb position for drawing feedback, in viewport pixels. */
+bool issd_touch_thumb(int *x, int *y);
 
 /* Recompute the layout. Safe to call every frame; only does work when the
  * viewport actually changed. */
@@ -76,7 +89,8 @@ void issd_touch_reset_points(void);
 
 /* Replace the current set of active touch points. Coordinates are viewport
  * pixels. Call once per frame with every finger currently down, then read
- * issd_touch_pad_mask(). */
+ * issd_touch_pad_mask(). Indices act as identities; SDL should use the stable
+ * device/finger API above because its finger array can reorder after a lift. */
 void issd_touch_set_points(const int *xs, const int *ys, int count);
 
 /* SNES joypad mask produced by the current touch points. */
@@ -90,7 +104,7 @@ bool issd_touch_take_menu_press(void);
  * Coordinates are in viewport pixels. */
 bool issd_touch_take_screen_tap(int *out_x, int *out_y);
 
-/* Whether the pad (everything except the menu button) is currently shown. */
+/* Whether the pad (everything except Menu and Hide/Show) is currently shown. */
 bool issd_touch_pad_visible(void);
 void issd_touch_set_pad_visible(bool visible);
 

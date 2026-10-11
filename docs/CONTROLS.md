@@ -1,8 +1,7 @@
 # Controls and profiles
 
 Open the overlay with **Escape/F1**, gamepad **Guide/Home** or **Back+Start**,
-then choose **Controls / Profiles**. This guide describes current source;
-per-player remapping and touch placement are not in the published v0.2.0-beta.1.
+then choose **Controls / Profiles**. This guide describes the current beta.
 
 Select P1–P4 with Left/Right on **Player**. Every slot stores its own preset,
 native SNES action bindings, stick deadzone and trigger threshold. Choose
@@ -40,6 +39,21 @@ action disables that action's legacy aliases. Keyboard sampling uses the saved
 configuration and checks scancode bounds; it is independent of the pad presets.
 
 ## Touch layout
+
+Touch face buttons use native **A/B/X/Y** letters. Their gameplay actions can
+change with the original game's control mode, possession or scene, so the overlay
+does not assign fixed Shoot/Pass/Dash labels. These are native SNES inputs;
+physical controller presets do not remap the touch buttons.
+
+The thumb pad has eight angular directions and a circular dead zone whose radius
+is 8% of its diameter. Touch inside the pad to acquire it, then slide toward the
+wanted direction. Movement remains captured by that finger until it lifts, even
+beyond the artwork. A second finger can hold an action button independently;
+releasing that finger does not interrupt movement. Visible arrows, the active
+sector and the moving thumb marker show the requested direction. Captured movement
+cannot accidentally activate Menu/Hide when dragged onto them. Hiding, disabling,
+changing layout and suspending clear held inputs. Rotation clears input and waits
+for all fingers to lift before accepting fresh touches.
 
 **Touch Layout** selects each D-pad, action, shoulder, Start/Select, Hide and
 Menu control. Adjust horizontal/vertical centers on a 0–1000 viewport scale and
