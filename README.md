@@ -10,6 +10,8 @@ Enable **Graphics → Running Animation → Enhanced** and hold **Y / Dash** to 
 
 The [supported-feature inventory](docs/SUPPORTED_FEATURES.md) records actual behavior and inactive settings; [acceptance checks](docs/ACCEPTANCE_TESTS.md) separate automated evidence from pending complete-campaign and device testing. Original formation/substitution menus have [input-driven acceptance checks](docs/TEAM_CHANGES_ACCEPTANCE.md) for first-team commits, request cancellation and advancing save/reload with AI off/on. The project remains a beta; netplay is a [future design](docs/NETPLAY_DESIGN.md).
 
+Project metadata for [recomp.board](https://recomp.fyi) and other tools lives in [`.recomp.json`](.recomp.json), following the [recomp.board specification](https://recomp.fyi/spec). Its `released` status means a public build is available and maintained; the project remains a beta working toward 1.0. Update the manifest whenever the project status, toolchain, or supported original release changes.
+
 ## Current platforms
 
 | Platform | Current state |
