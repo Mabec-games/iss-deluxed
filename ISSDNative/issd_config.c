@@ -100,9 +100,9 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->target_fps = 60;
     cfg->integer_scaling = false;
     cfg->scanlines = false;
-    cfg->aspect_ratio = ISSD_ASPECT_16_9;   /* ISS DELUXE'd: widescreen out of the box */
+    cfg->aspect_ratio = ISSD_ASPECT_FIT;    /* ISS DELUXE'd: pixel-perfect widescreen out of the box */
     cfg->internal_res = ISSD_RES_4X;
-    cfg->scaling_filter = ISSD_FILTER_LINEAR;
+    cfg->scaling_filter = ISSD_FILTER_NEAREST;
     cfg->true_widescreen = true;
     cfg->widescreen_menus = true;
     cfg->enhanced_running_animation = true;

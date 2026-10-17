@@ -15,7 +15,8 @@ int main(int argc, char **argv) {
     cfg.camera_mode = ISSD_CAMERA_TACTICAL_WIDE;
     assert(!cfg.integer_scaling && cfg.output_resolution == 0 && cfg.overlay_scale == 0);
     assert(!cfg.ball_outline && !cfg.ball_shadow && !cfg.player_markers && !cfg.player_names);
-    assert(cfg.enhanced_running_animation && cfg.aspect_ratio == ISSD_ASPECT_16_9);
+    assert(cfg.enhanced_running_animation && cfg.aspect_ratio == ISSD_ASPECT_FIT);
+    assert(cfg.scaling_filter == ISSD_FILTER_NEAREST);
     assert(cfg.widescreen_menus && !strcmp(cfg.hd_texture_packs, "title_screen_hd"));
     assert(!cfg.color_boost && cfg.crt_strength==100);
     assert(cfg.radar_scale == 1);
@@ -184,7 +185,7 @@ int main(int argc, char **argv) {
     assert(issd_config_load(&loaded, argv[1]));
     assert(loaded.output_resolution == 0 && loaded.overlay_scale == 0 && loaded.radar_scale == 1);
     assert(!loaded.ball_outline && !loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
-    assert(loaded.scaling_filter == ISSD_FILTER_LINEAR && loaded.internal_res == ISSD_RES_8X_4K);
+    assert(loaded.scaling_filter == ISSD_FILTER_NEAREST && loaded.internal_res == ISSD_RES_8X_4K);
     assert(loaded.aspect_ratio == ISSD_ASPECT_4_3);
     assert(loaded.enhanced_running_animation);
     const char *running_values[] = {"-99", "999999999999999999999999", "oops", "0", "1"};
