@@ -1091,7 +1091,7 @@ static void render_graphics_preview(uint32_t *fb, int width, int height) {
         int numerator=4, denominator=3;
         switch(cfg->aspect_ratio) {
         case ISSD_ASPECT_8_7: numerator=8;denominator=7;break;
-        case ISSD_ASPECT_16_9: numerator=16;denominator=9;break;
+        case ISSD_ASPECT_16_9: case ISSD_ASPECT_FIT: numerator=16;denominator=9;break;
         case ISSD_ASPECT_16_10: numerator=16;denominator=10;break;
         case ISSD_ASPECT_21_9: numerator=21;denominator=9;break;
         case ISSD_ASPECT_AUTHENTIC: numerator=10;denominator=7;break;
@@ -1136,7 +1136,7 @@ static void render_graphics(uint32_t *fb, int width, int height, int bx, int by,
 #ifndef ISSD_ANDROID
     static const char *output[] = { "AUTO", "1280x720", "1920x1080", "2560x1440", "3840x2160" };
 #endif
-    static const char *aspect[] = { "4:3 CRT", "8:7 PIXEL", "16:9 WIDE", "16:10 PC", "21:9 ULTRA", "LEGACY INTEGER", "AUTHENTIC 320" };
+    static const char *aspect[] = { "4:3 CRT", "8:7 PIXEL", "16:9 WIDE", "16:10 PC", "21:9 ULTRA", "LEGACY INTEGER", "AUTHENTIC 320", "FIT PIXEL PERFECT" };
     static const char *filter[] = { "NEAREST", "LINEAR", "CRT SCANLINES", "SHARP" };
     static const int multiple[] = {1,2,3,4,6,8};
     char rows[GRAPHICS_ROWS][64], scale[16];
@@ -1286,7 +1286,8 @@ void issd_menu_render(uint32_t *fb, int width, int height) {
                              (g_issd_config.aspect_ratio == ISSD_ASPECT_16_9)    ? "16:9 WIDE" :
                              (g_issd_config.aspect_ratio == ISSD_ASPECT_16_10)   ? "16:10 PC" :
                              (g_issd_config.aspect_ratio == ISSD_ASPECT_21_9)    ? "21:9 ULTRA" :
-                             (g_issd_config.aspect_ratio == ISSD_ASPECT_AUTHENTIC) ? "AUTHENTIC 320" : "INTEGER";
+                             (g_issd_config.aspect_ratio == ISSD_ASPECT_AUTHENTIC) ? "AUTHENTIC 320" :
+                             (g_issd_config.aspect_ratio == ISSD_ASPECT_FIT)       ? "FIT PIXEL PERFECT" : "INTEGER";
 
     static const int res_multiple[] = {1,2,3,4,6,8};
     int multiple = res_multiple[g_issd_config.internal_res];

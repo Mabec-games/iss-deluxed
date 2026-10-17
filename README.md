@@ -234,6 +234,7 @@ Useful runtime options:
 | `--frames <count>` | Stop after the requested simulation frame count |
 | `--auto-start <frame>` | Start automated menu navigation into a match |
 | `--screenshot <file.bmp>` | Save the final rendered frame |
+| `--fit-output <WxH>` | Output size the Fit aspect assumes in headless runs (default: 398-wide view) |
 | `--graphics-report <file.json>` | Record actual presentation dimensions, renderer resets and CPU/total rendering times |
 | `--dump-state <file>` | Write a diagnostic state dump |
 | `--script <file>` | Apply frame-based inputs, optionally addressed to P1–P4 |

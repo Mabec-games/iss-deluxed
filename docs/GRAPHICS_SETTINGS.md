@@ -59,6 +59,16 @@ possible. Choose square pixels or the legacy integer aspect for uniform square
 pixel multiples. A window smaller than the native image falls back to fitting
 the whole image instead of cropping it.
 
+**Fit Pixel Perfect** (Aspect) chooses the widest tested widescreen view that
+fits the window at the largest whole-number scale, and always uses integer
+scaling. The tested widths are 398, 426 and 480 pixels: 1920x1080 shows 480 at
+4x (full width), 2560x1440 and 3840x2160 show 426 at 6x and 9x, and 1280x720
+and 1280x800 show 426 at 3x. Other screens use whichever of the three gives the
+largest scale. The width follows window resizes and fullscreen changes; headless
+runs use 398 unless `--fit-output WxH` is given. Choose the Nearest filter for
+fully sharp pixels. True widescreen must be on; with it off, Fit shows the
+original 256-pixel view at an integer scale.
+
 **Game Filter** offers Nearest, Linear, CRT Scanlines and **Sharp**. Sharp
 first enlarges by an integer factor with nearest sampling, then uses linear
 filtering to fit the viewport. It reduces fractional-scaling harshness without
