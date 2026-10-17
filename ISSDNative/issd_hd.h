@@ -108,6 +108,10 @@ void issd_hd_composite(const Ppu *ppu,
  * A dump must not need a pack to already exist. */
 void issd_hd_dump_frame(const Ppu *ppu);
 
+/* Leave a native-frame rectangle alone, e.g. where a replacement logo was
+ * drawn over the original. A zero width or height clears it. */
+void issd_hd_set_exclusion(int x, int y, int w, int h);
+
 /* Tiles replaced in the last composited frame, for the status line. */
 int issd_hd_last_frame_hits(void);
 

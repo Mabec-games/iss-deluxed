@@ -722,6 +722,13 @@ int  issd_hd_texture_count(void) { return s_texture_count+s_local_texture_count;
 const char *issd_hd_pack_name(void) { return s_pack_name; }
 int issd_hd_last_frame_hits(void) { return s_last_hits; }
 
+static int s_ex_x0, s_ex_y0, s_ex_x1, s_ex_y1;
+void issd_hd_set_exclusion(int x, int y, int w, int h) {
+    s_ex_x0 = x; s_ex_y0 = y;
+    s_ex_x1 = w > 0 && h > 0 ? x + w : x;
+    s_ex_y1 = w > 0 && h > 0 ? y + h : y;
+}
+
 void issd_hd_set_dump_start(unsigned frame) { s_dump_start = frame; }
 
 void issd_hd_set_dump_dir(const char *directory) {
@@ -952,6 +959,8 @@ void issd_hd_composite(const Ppu *ppu,
 
                     const int nx = margin_left + x;
                     if (nx < 0 || nx >= native_w) continue;
+                    if (nx >= s_ex_x0 && nx < s_ex_x1 && y >= s_ex_y0 && y < s_ex_y1)
+                        continue;               /* a replacement logo is drawn here */
                     if ((native[(size_t)y * native_w + nx] & 0xFFFFFFu) !=
                         hd_colour(ppu, pal_base + pixel))
                         continue;               /* covered, or colour-mathed */

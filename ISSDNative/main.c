@@ -24,6 +24,7 @@
 #include "issd_bridge.h"
 #include "issd_config.h"
 #include "issd_video.h"
+#include "issd_title_logo.h"
 #include "issd_camera_render.h"
 #include "issd_readability.h"
 #include "issd_visual.h"
@@ -2152,6 +2153,7 @@ int main(int argc, char **argv) {
             issd_hd_apply(mods_dir);
         }
         issd_mod_result_note_tiles(issd_hd_active() ? issd_hd_texture_count() : 0);
+        issd_title_logo_load(mods_dir);
         if (g_hd_dump_dir) {
             issd_hd_set_dump_dir(g_hd_dump_dir);
             issd_hd_set_dump_start(g_hd_dump_from);
@@ -2752,6 +2754,12 @@ int main(int argc, char **argv) {
                 issd_menu_render_team_flags(g_pixel_buffer, cur_render_w,
                                             cur_render_h,
                                             g_ws_active ? g_ws_extra : 0);
+                {
+                    int lx = 0, ly = 0, lw = 0, lh = 0;
+                    issd_title_logo_apply(g_pixel_buffer, cur_render_w, cur_render_h,
+                                          g_ws_active ? g_ws_extra : 0, &lx, &ly, &lw, &lh);
+                    issd_hd_set_exclusion(lx, ly, lw, lh);
+                }
                 if (g_main_menu_returning) {
                     /* The destination is the native menu; show progress while
                      * original startup screens are being advanced internally. */
