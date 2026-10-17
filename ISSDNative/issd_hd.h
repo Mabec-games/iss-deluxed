@@ -108,6 +108,10 @@ void issd_hd_composite(const Ppu *ppu,
  * A dump must not need a pack to already exist. */
 void issd_hd_dump_frame(const Ppu *ppu);
 
+/* The scroll a background layer was drawn with on one screen row of the
+ * last frame. False when the row was not drawn or the layer was off. */
+bool issd_hd_line_scroll(int row, int layer, unsigned *hscroll, unsigned *vscroll);
+
 /* Leave a native-frame rectangle alone, e.g. where a replacement logo was
  * drawn over the original. A zero width or height clears it. */
 void issd_hd_set_exclusion(int x, int y, int w, int h);

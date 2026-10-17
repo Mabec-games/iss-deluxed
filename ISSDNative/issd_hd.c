@@ -722,6 +722,15 @@ int  issd_hd_texture_count(void) { return s_texture_count+s_local_texture_count;
 const char *issd_hd_pack_name(void) { return s_pack_name; }
 int issd_hd_last_frame_hits(void) { return s_last_hits; }
 
+bool issd_hd_line_scroll(int row, int layer, unsigned *hscroll, unsigned *vscroll) {
+    if (row < 0 || row >= MAX_LINES || layer < 0 || layer > 3) return false;
+    const HdLineRegs *r = &s_lines[row];
+    if (!r->valid || !(r->mainLayers & (1u << layer))) return false;
+    if (hscroll) *hscroll = r->hScroll[layer] & 0x3FF;
+    if (vscroll) *vscroll = r->vScroll[layer] & 0x3FF;
+    return true;
+}
+
 static int s_ex_x0, s_ex_y0, s_ex_x1, s_ex_y1;
 void issd_hd_set_exclusion(int x, int y, int w, int h) {
     s_ex_x0 = x; s_ex_y0 = y;

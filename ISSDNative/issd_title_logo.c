@@ -10,6 +10,25 @@ enum { LOGO_X = 18, LOGO_Y = 26 };
 static uint32_t *s_logo, *s_reference;
 static int s_w, s_h;
 
+/* The lettering flies in as a scaled sprite over a still brushstroke, so
+ * it is found by colour: none of its colours occur in the brushstroke. */
+static uint32_t *s_brush, *s_text;
+static int s_text_w, s_text_h;
+static uint32_t s_text_colours[64];
+static int s_text_colour_count;
+/* Every colour of the lettering, including ones it shares with the
+ * brushstroke or background (its white faces are the background white). */
+static uint32_t s_old_colours[64];
+static int s_old_colour_count;
+
+static bool in_list(const uint32_t *list, int count, uint32_t c) {
+    c &= 0xFFFFFFu;
+    for (int i = 0; i < count; i++)
+        if (list[i] == c) return true;
+    return false;
+}
+static bool is_text_colour(uint32_t c) { return in_list(s_text_colours, s_text_colour_count, c); }
+
 /* 32-bit BMP, top-down or bottom-up, uncompressed or bitfields. */
 static uint32_t *load_bmp(const char *path, int *w, int *h) {
     FILE *f = fopen(path, "rb");
@@ -44,9 +63,9 @@ done:
 }
 
 bool issd_title_logo_load(const char *mods_dir) {
-    free(s_logo); free(s_reference);
-    s_logo = s_reference = NULL;
-    s_w = s_h = 0;
+    free(s_logo); free(s_reference); free(s_brush); free(s_text);
+    s_logo = s_reference = s_brush = s_text = NULL;
+    s_w = s_h = s_text_w = s_text_h = s_text_colour_count = s_old_colour_count = 0;
     if (!mods_dir || !mods_dir[0]) return false;
     char path[1024];
     int lw = 0, lh = 0, rw = 0, rh = 0;
@@ -60,7 +79,97 @@ bool issd_title_logo_load(const char *mods_dir) {
         return false;
     }
     s_logo = logo; s_reference = reference; s_w = lw; s_h = lh;
-    printf("[TitleLogo] Loaded %dx%d replacement logo.\n", s_w, s_h);
+
+    /* Optional fly-in layers; without them only the finished logo swaps. */
+    int bw = 0, bh = 0, ow = 0, oh = 0, tw = 0, th = 0;
+    snprintf(path, sizeof path, "%s/title_logo/brush.bmp", mods_dir);
+    uint32_t *brush = load_bmp(path, &bw, &bh);
+    snprintf(path, sizeof path, "%s/title_logo/old_text.bmp", mods_dir);
+    uint32_t *old = load_bmp(path, &ow, &oh);
+    snprintf(path, sizeof path, "%s/title_logo/text.bmp", mods_dir);
+    uint32_t *text = load_bmp(path, &tw, &th);
+    if (brush && old && text && bw == lw && bh == lh && ow == lw && oh == lh &&
+        tw <= lw && th <= lh) {
+        /* old_text.bmp holds the lettering's own pixels with their true
+         * colours; those absent from the brushstroke identify it. */
+        for (int i = 0; i < ow * oh; i++) {
+            if (!(old[i] >> 24)) continue;
+            const uint32_t c = old[i] & 0xFFFFFFu;
+            if (!in_list(s_old_colours, s_old_colour_count, c) && s_old_colour_count < 64)
+                s_old_colours[s_old_colour_count++] = c;
+            bool in_brush = false;
+            for (int j = 0; j < bw * bh && !in_brush; j++) in_brush = (brush[j] & 0xFFFFFFu) == c;
+            if (!in_brush && !is_text_colour(c) && s_text_colour_count < 64)
+                s_text_colours[s_text_colour_count++] = c;
+        }
+        s_brush = brush; s_text = text; s_text_w = tw; s_text_h = th;
+        brush = text = NULL;
+    }
+    free(brush); free(old); free(text);
+    printf("[TitleLogo] Loaded %dx%d replacement logo%s.\n", s_w, s_h,
+           s_text ? " with fly-in lettering" : "");
+    return true;
+}
+
+/* What lies behind the lettering at box coordinates (x, y): the stroke
+ * inside the logo box, plain background outside it, where the lettering
+ * passes while it is still large and far to the right. */
+static uint32_t behind(int x, int y) {
+    if (x >= 0 && x < s_w && y >= 0 && y < s_h) return s_brush[y * s_w + x] & 0xFFFFFFu;
+    return s_brush[0] & 0xFFFFFFu;
+}
+
+/* While the lettering flies in or waits for the ball, swap it for the new
+ * lettering at the same place and size. The search area runs from the top
+ * of the screen to the logo box's bottom and across to the frame's right
+ * edge, where the lettering enters. Returns true when done. */
+static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int right) {
+    if (!s_text || !s_text_colour_count) return false;
+    const int ax0 = 0, ay0 = -y0, ax1 = right - x0, ay1 = s_h;   /* box coordinates */
+    int brush = 0, text = 0, bx0 = ax1, by0 = ay1, bx1 = ax0 - 1, by1 = ay0 - 1;
+    for (int y = ay0; y < ay1; y++) {
+        const uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
+        for (int x = ax0; x < ax1; x++) {
+            const uint32_t c = row[x] & 0xFFFFFFu;
+            if (c == behind(x, y)) { if (x < s_w && y >= 0) brush++; }
+            else if (is_text_colour(c)) {
+                text++;
+                if (x < bx0) bx0 = x;
+                if (x > bx1) bx1 = x;
+                if (y < by0) by0 = y;
+                if (y > by1) by1 = y;
+            }
+        }
+    }
+    /* Mostly brushstroke plus lettering: the title screen between the
+     * stroke being painted and the ball landing. */
+    if (text < 16 || (size_t)(brush + text) * 100 < (size_t)s_w * s_h * 75) return false;
+    for (int y = by0; y <= by1; y++) {
+        uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
+        for (int x = bx0; x <= bx1; x++)
+            if ((row[x] & 0xFFFFFFu) != behind(x, y) &&
+                in_list(s_old_colours, s_old_colour_count, row[x]))
+                row[x] = 0xFF000000u | behind(x, y);
+    }
+    /* The game scales the lettering uniformly and it can be cut off at the
+     * right edge as it enters, so its height gives the scale. */
+    int th = by1 - by0 + 1;
+    if (th > s_text_h) th = s_text_h;
+    int tw = (s_text_w * th + s_text_h / 2) / s_text_h;
+    for (int y = 0; y < th; y++) {
+        const int fy = by0 + y;
+        if (fy >= ay1) break;
+        const uint32_t *src = s_text + (size_t)(y * s_text_h / th) * s_text_w;
+        uint32_t *row = frame + (size_t)(y0 + fy) * width + x0;
+        for (int x = 0; x < tw; x++) {
+            const int fx = bx0 + x;
+            if (fx >= ax1) break;
+            const uint32_t c = src[x * s_text_w / tw];
+            /* Only over the brushstroke or background: the ball stays in front. */
+            if ((c >> 24) && (row[fx] & 0xFFFFFFu) == behind(fx, fy))
+                row[fx] = 0xFF000000u | (c & 0xFFFFFFu);
+        }
+    }
     return true;
 }
 
@@ -78,7 +187,15 @@ bool issd_title_logo_apply(uint32_t *frame, int width, int height, int margin_le
         for (int x = 0; x < s_w; x++)
             same += ((row[x] ^ ref[x]) & 0xFFFFFFu) == 0;
     }
-    if (same * 100 < total * 97) return false;
+    if (same * 100 < total * 97) {
+        const int right = width;   /* widescreen shows the lettering entering beyond 256 */
+        if (!replace_lettering(frame, width, x0, y0, right)) return false;
+        if (box_x) *box_x = x0;
+        if (box_y) *box_y = 0;
+        if (box_w) *box_w = right - x0;
+        if (box_h) *box_h = y0 + s_h;
+        return true;
+    }
     for (int y = 0; y < s_h; y++) {
         uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
         const uint32_t *src = s_logo + (size_t)y * s_w;
