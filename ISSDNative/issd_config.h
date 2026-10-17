@@ -87,6 +87,7 @@ typedef struct {
     IssdInternalResolution internal_res;
     IssdScalingFilter scaling_filter;
     bool true_widescreen;
+    bool widescreen_menus;  /* false: widen only match play, replays and penalties */
     IssdCameraMode camera_mode;
     int output_resolution; /* 0 current/auto, 1 720p, 2 1080p, 3 1440p, 4 2160p */
     int overlay_scale;     /* 0 automatic, 1..4 output-pixel UI scale */

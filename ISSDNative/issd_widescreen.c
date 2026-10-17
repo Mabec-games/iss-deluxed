@@ -887,6 +887,9 @@ bool Issd_IsWidescreenActive(void) {
   return s_ws_extra > 0;
 }
 
+static bool s_widen_menus = true;
+void issd_widescreen_set_menus(bool widen) { s_widen_menus = widen; }
+
 bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
                           size_t rom_size, int extra) {
   if (frame.owner) issd_widescreen_end(frame.owner);
@@ -932,7 +935,9 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
     s_ws_extra = 0;
     unsigned submode = word(ram, 0x70);
     bool is_pillarboxed = (submode == 0x0F || submode == 0x10 || submode == 0x12 || submode == 0x1C);
-    if (issd_widescreen_coin_layout(ppu, ram)) {
+    if (!s_widen_menus && !penalty_layout(ppu, ram)) {
+      PpuSetExtraSpaceCentered(ppu, (uint16_t)extra);
+    } else if (issd_widescreen_coin_layout(ppu, ram)) {
       PpuSetExtraSpace(ppu, (uint16_t)extra);
       PpuSetExtraSideSpace(ppu, extra, extra, 0);
       frame.owner=ppu;

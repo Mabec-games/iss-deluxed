@@ -379,7 +379,7 @@ bool issd_menu_internal_res_applies(void) {
 }
 
 #define MENU_VISIBLE_ROWS 15
-#define GRAPHICS_ROWS 21
+#define GRAPHICS_ROWS 22
 static int s_main_visible_rows = MENU_VISIBLE_ROWS, s_graphics_visible_rows = GRAPHICS_ROWS;
 static void menu_fit_height(int height) {
     s_main_visible_rows = (height - 44) / 12;
@@ -453,6 +453,7 @@ static void graphics_adjust(int direction) {
     case 17: g_issd_config.enhanced_running_animation = !g_issd_config.enhanced_running_animation; break;
     case 18: g_issd_config.crt_strength = ((g_issd_config.crt_strength / 25 + direction + 5) % 5) * 25; break;
     case 19: g_issd_config.camera_mode = (IssdCameraMode)((g_issd_config.camera_mode + direction + 3) % 3); break;
+    case 20: g_issd_config.widescreen_menus = !g_issd_config.widescreen_menus; break;
     default: issd_menu_cancel(); return;
     }
     issd_config_save(&g_issd_config, NULL);
@@ -1173,7 +1174,8 @@ static void render_graphics(uint32_t *fb, int width, int height, int bx, int by,
     snprintf(rows[18], sizeof rows[18], "CRT Strength: <%d%%>", g_issd_config.crt_strength);
     snprintf(rows[19], sizeof rows[19], "Camera: <%s>", g_issd_config.camera_mode == ISSD_CAMERA_TACTICAL ? "TACTICAL 80%" :
              g_issd_config.camera_mode == ISSD_CAMERA_TACTICAL_WIDE ? "TACTICAL WIDE 67%" : "CLASSIC");
-    snprintf(rows[20], sizeof rows[20], "Back");
+    snprintf(rows[20], sizeof rows[20], "Widescreen Menus: <%s>", g_issd_config.widescreen_menus ? "ON" : "OFF (GAMEPLAY ONLY)");
+    snprintf(rows[21], sizeof rows[21], "Back");
     DrawString(fb, width, height, bx + 14, by + 4, "GRAPHICS / READABILITY", 0xFFFFD700);
     menu_keep_visible();
     for (int row = g_overlay_menu.scroll; row < GRAPHICS_ROWS && row < g_overlay_menu.scroll + s_graphics_visible_rows; row++) {

@@ -104,6 +104,7 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->internal_res = ISSD_RES_4X;
     cfg->scaling_filter = ISSD_FILTER_LINEAR;
     cfg->true_widescreen = true;
+    cfg->widescreen_menus = true;
     cfg->enhanced_running_animation = false;
     cfg->crt_strength = 100;
     cfg->radar_scale = 1;
@@ -326,6 +327,7 @@ static void apply_config_value(IssdConfig *cfg, const char *key, const char *val
     else if (strcmp(key, "integer_scaling") == 0) cfg->integer_scaling = (ival != 0);
     else if (strcmp(key, "scanlines") == 0) cfg->scanlines = (ival != 0);
     else if (strcmp(key, "true_widescreen") == 0) cfg->true_widescreen = (ival != 0);
+    else if (strcmp(key, "widescreen_menus") == 0) cfg->widescreen_menus = (ival != 0);
     else if (strcmp(key, "audio_freq") == 0) cfg->audio_freq = ival;
     else if (strcmp(key, "master_volume") == 0) cfg->master_volume = ival;
     else if (strcmp(key, "music_volume") == 0) cfg->music_volume = ival;
@@ -411,6 +413,7 @@ bool issd_config_save(const IssdConfig *cfg, const char *filepath) {
     fprintf(f, "internal_res=%d\n", (int)cfg->internal_res);
     fprintf(f, "scaling_filter=%d\n", (int)cfg->scaling_filter);
     fprintf(f, "true_widescreen=%d\n", cfg->true_widescreen ? 1 : 0);
+    fprintf(f, "widescreen_menus=%d\n", cfg->widescreen_menus ? 1 : 0);
     fprintf(f, "camera_mode=%d\n", (int)cfg->camera_mode);
     fprintf(f, "output_resolution=%d\n", clamp(cfg->output_resolution, 0, 4));
     fprintf(f, "overlay_scale=%d\n", clamp(cfg->overlay_scale, 0, 4));

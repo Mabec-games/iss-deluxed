@@ -561,6 +561,7 @@ static void IssdDrawPpuFrame(void) {
     }
     issd_hd_set_stadium_context(stadium_id,generation);
 
+    issd_widescreen_set_menus(g_issd_config.widescreen_menus);
     issd_widescreen_begin(g_snes->ppu, g_ram, g_rom_data, g_rom_size,
                          g_ws_active ? g_ws_extra : 0);
     int camera_width=SNES_WIDTH+2*(g_ws_active ? g_ws_extra : 0);

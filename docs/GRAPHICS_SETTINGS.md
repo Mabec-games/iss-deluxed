@@ -69,6 +69,12 @@ runs use 398 unless `--fit-output WxH` is given. Choose the Nearest filter for
 fully sharp pixels. True widescreen must be on; with it off, Fit shows the
 original 256-pixel view at an integer scale.
 
+**Widescreen Menus** (default On) controls the scenes around a match. Off
+widens only match play, replays and penalty kicks/shootouts; menus, the title
+screen, the coin toss, halftime/fulltime statistics and campaign cards show
+their original 256 columns centered between black bars. It saves as
+`widescreen_menus` and has no effect at 4:3 or with true widescreen off.
+
 **Game Filter** offers Nearest, Linear, CRT Scanlines and **Sharp**. Sharp
 first enlarges by an integer factor with nearest sampling, then uses linear
 filtering to fit the viewport. It reduces fractional-scaling harshness without
