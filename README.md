@@ -1,5 +1,7 @@
 # ISSD Native
 
+> **Fork notice:** This is a non-commercial community fork of [sergiomanzur/issd-native](https://github.com/sergiomanzur/issd-native). See [Fork licensing](#fork-licensing) for what you may and may not do with it.
+
 A native recompilation and modernization of **International Superstar Soccer Deluxe (USA)** for the Super Nintendo. The original 65816 code is translated into C, with native replacements for asset decompression, memory streaming, and audio command handling. The runner retains SNES hardware models for video, audio, and other peripherals.
 
 The goal is to preserve the original gameplay while adding modern controls, presentation options, saves, and editable mod packs. This is a **beta project working toward 1.0**; recompilation coverage does not establish complete gameplay or hardware fidelity.
@@ -269,5 +271,14 @@ Component licenses:
 - [SNESRecomp](deps/snesrecomp/LICENSE): PolyForm Noncommercial License 1.0.0.
 - [ISSD disassembly reference](deps/ISSD-disassembly/LICENSE): GPL-3.0.
 - [ISSD web editor reference](deps/ISSD-web-editor/LICENSE.md): MIT.
+
+### Fork licensing
+
+This fork keeps the upstream licensing unchanged:
+
+- The project's own code is GPL-3.0 ([LICENSE](LICENSE)), as released by sergiomanzur.
+- [SNESRecomp](deps/snesrecomp/LICENSE) by Matthew Stan is PolyForm Noncommercial 1.0.0. Because every ISSD Native build links its runtime, **builds of this fork are for noncommercial use only**. Do not sell them or distribute them for commercial purposes.
+- Anyone redistributing this fork, or builds of it, must include both license files and the [component attributions](deps/snesrecomp/THIRD_PARTY_ATTRIBUTION.md).
+- No ROM is included, and none will be. Supply your own legally obtained retail USA cartridge dump.
 
 International Superstar Soccer Deluxe and associated marks belong to their respective rights holders. This is an independent reverse-engineering, preservation, and modernization project. Release packages do not include the game ROM.
