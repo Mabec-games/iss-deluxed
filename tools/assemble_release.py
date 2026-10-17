@@ -122,6 +122,8 @@ def assemble(windows_build, linux_build, android_build, studio_exe):
     common = {'README.md': ROOT/'README.md', 'CHANGELOG.md': ROOT/'CHANGELOG.md',
               'VERSION': ROOT/'VERSION', 'RELEASE_NOTES.md': ROOT/f'docs/releases/{tag}.md',
               f'docs/releases/{tag}.md': ROOT/f'docs/releases/{tag}.md',
+              'LICENSE': ROOT/'LICENSE',
+              'licenses/LICENSE': ROOT/'LICENSE',
               'licenses/SNESRecomp.txt': ROOT/'deps/snesrecomp/LICENSE',
               'licenses/SDL2.txt': ROOT/'deps/SDL2/LICENSE.txt'}
     documents = ('GAMEPLAY_TWEAKS LOCAL_MULTIPLAYER CAMPAIGN_SAVES CAMPAIGN_CARTRIDGE_FLOW '

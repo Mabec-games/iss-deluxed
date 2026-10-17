@@ -262,6 +262,8 @@ Rollback netplay, interpolated presentation, expanded asset replacement, and add
 - [Known differences](docs/KNOWN_DIFFERENCES.md) and [enhancement design notes](docs/ENHANCEMENTS.md) — some entries describe planned behavior; use this README and the current source for implementation status
 - [Changelog](CHANGELOG.md), [modding](docs/MODDING.md), and [local multiplayer](docs/LOCAL_MULTIPLAYER.md)
 
+This project's own codebase (`ISSDNative/`, `tools/`, `docs/`, and build scripts) is licensed under the **GNU General Public License v3.0** (see [LICENSE](LICENSE)).
+
 Component licenses:
 
 - [SNESRecomp](deps/snesrecomp/LICENSE): PolyForm Noncommercial License 1.0.0.
