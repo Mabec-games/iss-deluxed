@@ -73,7 +73,7 @@ int main(void) {
     assert(prepared_contexts == 0);
     /* The animation row switches and saves without touching game context. */
     g_overlay_menu.current_item = 17;
-    assert(!g_issd_config.enhanced_running_animation);
+    g_issd_config.enhanced_running_animation = false; /* default is on */
     issd_menu_navigate_right();
     assert(g_issd_config.enhanced_running_animation);
     IssdConfig animation_loaded;

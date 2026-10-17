@@ -15,7 +15,8 @@ int main(int argc, char **argv) {
     cfg.camera_mode = ISSD_CAMERA_TACTICAL_WIDE;
     assert(!cfg.integer_scaling && cfg.output_resolution == 0 && cfg.overlay_scale == 0);
     assert(!cfg.ball_outline && !cfg.ball_shadow && !cfg.player_markers && !cfg.player_names);
-    assert(!cfg.enhanced_running_animation);
+    assert(cfg.enhanced_running_animation && cfg.aspect_ratio == ISSD_ASPECT_16_9);
+    assert(cfg.widescreen_menus && !strcmp(cfg.hd_texture_packs, "title_screen_hd"));
     assert(!cfg.color_boost && cfg.crt_strength==100);
     assert(cfg.radar_scale == 1);
     assert(cfg.hud_scale == 1 && cfg.radar_position == 0 && cfg.radar_opacity == 75);
@@ -88,7 +89,7 @@ int main(int argc, char **argv) {
     if (!strstr(contents, "rom_path=")) return 6;
     if (!strstr(contents, "mods_dir=")) return 7;
     if (!strstr(contents, "aspect_ratio=2")) return 8;
-    assert(strstr(contents, "enhanced_running_animation=0\n"));
+    assert(strstr(contents, "enhanced_running_animation=1\n"));
     assert(strstr(contents, "color_boost=0\n"));
     assert(strstr(contents, "crt_strength=100\n"));
     assert(strstr(contents, "ball_outline=0\n"));
@@ -100,12 +101,12 @@ int main(int argc, char **argv) {
     assert(loaded.scaling_filter == ISSD_FILTER_SHARP && loaded.radar_scale == 3);
     assert(loaded.hud_scale == 3 && loaded.radar_position == 4 && loaded.radar_opacity == 50);
     assert(!loaded.ball_outline && loaded.ball_shadow && loaded.player_markers && loaded.player_names);
-    assert(!loaded.enhanced_running_animation);
-    loaded.enhanced_running_animation = true;
+    assert(loaded.enhanced_running_animation);
+    loaded.enhanced_running_animation = false;
     loaded.camera_mode = ISSD_CAMERA_TACTICAL;
     assert(issd_config_save(&loaded, argv[1]));
     assert(issd_config_load(&loaded, argv[1]));
-    assert(loaded.enhanced_running_animation);
+    assert(!loaded.enhanced_running_animation);
     assert(loaded.camera_mode == ISSD_CAMERA_TACTICAL);
     if (strcmp(loaded.rom_path, cfg.rom_path) != 0) return 10;
     if (strcmp(loaded.mods_dir, cfg.mods_dir) != 0) return 11;
@@ -170,7 +171,7 @@ int main(int argc, char **argv) {
     assert(loaded.scaling_filter == ISSD_FILTER_CRT && loaded.integer_scaling);
     assert(loaded.output_resolution == 0 && loaded.overlay_scale == 0 && loaded.radar_scale == 1);
     assert(!loaded.ball_outline && !loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
-    assert(!loaded.enhanced_running_animation);
+    assert(loaded.enhanced_running_animation);
     /* Malformed new settings do not overwrite defaults; old filter values
      * remain stable across a fresh load and save. */
     f = fopen(argv[1], "w");
@@ -185,9 +186,9 @@ int main(int argc, char **argv) {
     assert(!loaded.ball_outline && !loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
     assert(loaded.scaling_filter == ISSD_FILTER_LINEAR && loaded.internal_res == ISSD_RES_8X_4K);
     assert(loaded.aspect_ratio == ISSD_ASPECT_4_3);
-    assert(!loaded.enhanced_running_animation);
+    assert(loaded.enhanced_running_animation);
     const char *running_values[] = {"-99", "999999999999999999999999", "oops", "0", "1"};
-    const bool running_expected[] = {false, true, false, false, true};
+    const bool running_expected[] = {false, true, true, false, true};
     for (int i = 0; i < 5; ++i) {
         f = fopen(argv[1], "w"); assert(f);
         fprintf(f, "enhanced_running_animation=%s\n", running_values[i]);

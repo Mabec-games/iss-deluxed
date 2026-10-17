@@ -100,12 +100,12 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->target_fps = 60;
     cfg->integer_scaling = false;
     cfg->scanlines = false;
-    cfg->aspect_ratio = ISSD_ASPECT_4_3;
+    cfg->aspect_ratio = ISSD_ASPECT_16_9;   /* ISS DELUXE'd: widescreen out of the box */
     cfg->internal_res = ISSD_RES_4X;
     cfg->scaling_filter = ISSD_FILTER_LINEAR;
     cfg->true_widescreen = true;
     cfg->widescreen_menus = true;
-    cfg->enhanced_running_animation = false;
+    cfg->enhanced_running_animation = true;
     cfg->crt_strength = 100;
     cfg->radar_scale = 1;
     cfg->hud_scale = 1;
@@ -127,7 +127,7 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->match_preset = ISSD_MATCH_ORIGINAL;
     cfg->match_custom = (IssdMatchRules){1, 2, 0, 0, 0, 1};
     cfg->active_mod_packs[0] = 0;
-    cfg->hd_texture_packs[0] = 0;
+    snprintf(cfg->hd_texture_packs, sizeof(cfg->hd_texture_packs), "%s", "title_screen_hd");
     snprintf(cfg->mods_dir, sizeof(cfg->mods_dir), "%s", "mods");
 
     if (issd_config_is_steam_deck()) {
