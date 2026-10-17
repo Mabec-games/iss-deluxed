@@ -1,4 +1,5 @@
 import subprocess
+import sys
 from pathlib import Path
 import shutil
 
@@ -21,6 +22,10 @@ def compile_c(exe, repo, sources, includes):
         cmd.append("/Fe:" + str(exe))
     else:
         cmd = [compiler, "-std=c11", "-Wall", "-Wextra", "-Werror"]
+        if sys.platform.startswith("linux"):
+            # glibc hides clock_gettime under strict C11, and GCC's
+            # truncation analysis flags the bounded save-path snprintf calls.
+            cmd += ["-D_POSIX_C_SOURCE=200809L", "-Wno-error=format-truncation"]
         for include in includes:
             cmd.extend(["-I", str(include)])
         cmd.extend(str(source) for source in sources)
