@@ -2202,8 +2202,14 @@ int main(int argc, char **argv) {
     const char *rom_path = rom_path_buffer;
 
     printf("====================================================\n");
-    printf("  ISSD Native — International Superstar Soccer Deluxe\n");
+    printf("  ISS DELUXE'd — International Superstar Soccer Deluxe\n");
+#if defined(_WIN32)
     printf("  Target: Windows x86-64 | Static Recompilation\n");
+#elif defined(ISSD_ANDROID)
+    printf("  Target: Android | Static Recompilation\n");
+#else
+    printf("  Target: Linux x86-64 | Static Recompilation\n");
+#endif
     printf("  Engine Mode: %s\n", (g_issd_config.engine_mode == ISSD_MODE_ENHANCED) ? "ENHANCED (60 Hz Smooth)" : "CLASSIC");
     printf("====================================================\n");
     printf("[Init] Loading ROM: %s\n", rom_path);
@@ -2216,7 +2222,7 @@ int main(int argc, char **argv) {
         if (!g_headless) {
             MessageBoxA(NULL,
                         "Failed to read the selected SNES ROM. Please choose a valid ISS Deluxe cartridge dump on the next run.",
-                        "ISSD Native", MB_ICONERROR | MB_OK);
+                        "ISS DELUXE'd", MB_ICONERROR | MB_OK);
         }
 #endif
         return 1;
@@ -2328,7 +2334,7 @@ int main(int argc, char **argv) {
 #endif
 
         g_window = SDL_CreateWindow(
-            "ISSD Native — International Superstar Soccer Deluxe",
+            "ISS DELUXE'd — International Superstar Soccer Deluxe",
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             win_w, win_h,
             win_flags

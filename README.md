@@ -1,12 +1,12 @@
-# ISSD Native
+# ISS DELUXE'd
 
-> **Fork notice:** This is a non-commercial community fork of [sergiomanzur/issd-native](https://github.com/sergiomanzur/issd-native). See [Fork licensing](#fork-licensing) for what you may and may not do with it.
+> **Fork notice:** ISS DELUXE'd is a non-commercial community fork of [ISSD Native](https://github.com/sergiomanzur/issd-native) by sergiomanzur. It is developed and tested on **Linux only**. See [Fork licensing](#fork-licensing) for what you may and may not do with it.
 
 A native recompilation and modernization of **International Superstar Soccer Deluxe (USA)** for the Super Nintendo. The original 65816 code is translated into C, with native replacements for asset decompression, memory streaming, and audio command handling. The runner retains SNES hardware models for video, audio, and other peripherals.
 
 The goal is to preserve the original gameplay while adding modern controls, presentation options, saves, and editable mod packs. This is a **beta project working toward 1.0**; recompilation coverage does not establish complete gameplay or hardware fidelity.
 
-The current release is **[v0.5.0-beta.3](https://github.com/sergiomanzur/issd-native/releases/tag/v0.5.0-beta.3)**, a GitHub prerelease for Windows, Linux and Android. It improves touch controls with clear button letters and an eight-direction thumb pad that retains movement while sliding. It also includes two tactical camera zoom-outs, centered campaign cards and recorded replay edge-player history. It also includes audio timing, shootout/persistence, substitution and widescreen replay fixes, bounded independent stadium profiles, and the improved Mod Studio with two example stadiums. Four-player local play, configurable controls, campaign recovery, cartridge password interoperability, exhibition shortcuts and optional AI/bug fixes remain available. See [CHANGELOG.md](CHANGELOG.md) and [the release notes](docs/releases/v0.5.0-beta.3.md).
+The latest upstream ISSD Native release is **[v0.5.0-beta.3](https://github.com/sergiomanzur/issd-native/releases/tag/v0.5.0-beta.3)**, a GitHub prerelease for Windows, Linux and Android. It improves touch controls with clear button letters and an eight-direction thumb pad that retains movement while sliding. It also includes two tactical camera zoom-outs, centered campaign cards and recorded replay edge-player history. It also includes audio timing, shootout/persistence, substitution and widescreen replay fixes, bounded independent stadium profiles, and the improved Mod Studio with two example stadiums. Four-player local play, configurable controls, campaign recovery, cartridge password interoperability, exhibition shortcuts and optional AI/bug fixes remain available. See [CHANGELOG.md](CHANGELOG.md) and [the release notes](docs/releases/v0.5.0-beta.3.md).
 
 Enable **Graphics → Running Animation → Enhanced** and hold **Y / Dash** to use the new running poses. Walking and other action clips retain their original animation. Ball Outline has been removed, including legacy saved enables.
 
@@ -16,15 +16,18 @@ Project metadata for [recomp.board](https://recomp.fyi) and other tools lives in
 
 ## Current platforms
 
-| Platform | Current state |
-| --- | --- |
-| Windows x86-64 | Release packages and a native CMake build. Current multiplayer, campaign saves, and password bridge built and tested here. |
-| Android 8.0+ | APK releases, ROM/mod import, touch controls, and overlay navigation. Build targets are `arm64-v8a` and `x86_64`. The new multiplayer changes still need an Android device playtest. |
-| Linux x86-64 | Release archive and CMake preset using system SDL2. Tested under Ubuntu 24.04 with headless startup, custom stadiums and save/load checks. |
-| SteamOS / Steam Deck | Build target using the Steam Linux Runtime 3.0 “sniper” SDK, a launcher script, and Deck-specific first-run settings. |
-| macOS | No validated port or release package at present. |
+ISS DELUXE'd supports **Linux x86-64 only**. The other platforms' code is
+inherited unchanged from upstream ISSD Native. It is not built or tested in this
+fork, and no support is offered for it. It may still work if you build it
+yourself.
 
-Current Windows, Linux, and Android builds succeed; gameplay and controller regression validation was performed on Windows. The SteamOS-specific SDK package was not rebuilt in this verification. Android releases currently use the debug signing configuration for sideload testing.
+| Platform | ISS DELUXE'd | Upstream ISSD Native |
+| --- | --- | --- |
+| Linux x86-64 | **Supported.** Built and tested with CMake and system SDL2 (CachyOS/Arch). | Release archive; tested under Ubuntu 24.04. |
+| Windows x86-64 | Not supported; inherited code, untested. | Release packages; main development and test platform. |
+| Android 8.0+ | Not supported; inherited code, untested. | APK releases (`arm64-v8a`, `x86_64`), debug-signed for sideloading. |
+| SteamOS / Steam Deck | Not supported; inherited code, untested. | Build target using the Steam Linux Runtime 3.0 “sniper” SDK. |
+| macOS / iOS | Not supported. | No port. |
 
 ## What is implemented
 
@@ -149,8 +152,8 @@ artwork using the same scenery template. See [measured acceptance and limits](do
 The generated C sources and SNESRecomp runner are checked into this repository; a normal build does not require regenerating the recompilation. Desktop builds require a C11/C++17 compiler, SDL2 development files, Ninja, and CMake 3.20+ (3.21+ for the supplied presets).
 
 ```powershell
-git clone https://github.com/sergiomanzur/issd-native.git
-cd issd-native
+git clone https://github.com/Mabec-games/iss-deluxed.git
+cd iss-deluxed
 ```
 
 ### Windows
