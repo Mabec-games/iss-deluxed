@@ -13,6 +13,8 @@
 #include <SDL.h>
 
 #include "launcher_picker.h"
+#include "sha256.h"
+#include "issd_password.h"
 
 #define STB_IMAGE_STATIC
 #define STB_IMAGE_IMPLEMENTATION
@@ -106,6 +108,7 @@ static SDL_Texture *load_png(SDL_Renderer *renderer, const uint8_t *png, size_t 
 /* ---- ROM check --------------------------------------------------------- */
 
 bool issd_launcher_rom_ok(const char *path, char *why, size_t why_size) {
+    enum { IMAGE = 2 * 1024 * 1024 };
     if (!path || !path[0]) { snprintf(why, why_size, "No ROM selected."); return false; }
     FILE *f = fopen(path, "rb");
     if (!f) { snprintf(why, why_size, "Could not open that file."); return false; }
@@ -113,13 +116,24 @@ bool issd_launcher_rom_ok(const char *path, char *why, size_t why_size) {
     long size = ftell(f);
     /* Copier dumps carry a 512-byte header before the cartridge image. */
     long base = size % 1024 == 512 ? 512 : 0;
-    char title[22] = {0};
-    bool read = size - base == 2 * 1024 * 1024 &&
-                fseek(f, base + 0x7FC0, SEEK_SET) == 0 && fread(title, 1, 21, f) == 21;
+    uint8_t *image = size - base == IMAGE ? (uint8_t *)malloc(IMAGE) : NULL;
+    bool read = image && fseek(f, base, SEEK_SET) == 0 && fread(image, 1, IMAGE, f) == IMAGE;
     fclose(f);
-    if (!read) { snprintf(why, why_size, "That is not a 2 MB SNES ROM."); return false; }
-    if (strncmp(title, "SUPERSTAR SOCCER 2", 18) != 0) {
-        snprintf(why, why_size, "That is a different game. Select International Superstar Soccer Deluxe (USA).");
+    if (!read) {
+        free(image);
+        snprintf(why, why_size, "That is not the International Superstar Soccer Deluxe (USA) ROM.");
+        return false;
+    }
+    /* Only the exact USA cartridge: other versions or modified dumps would
+     * play differently, and online both players must run the same game. */
+    uint8_t digest[32];
+    sha256_compute(image, IMAGE, digest);
+    bool same_title = memcmp(image + 0x7FC0, "SUPERSTAR SOCCER 2", 18) == 0;
+    free(image);
+    if (memcmp(digest, issd_supported_rom_sha256, sizeof digest) != 0) {
+        snprintf(why, why_size, same_title
+                 ? "That is a different version or a modified dump. Only the original USA ROM works."
+                 : "That is not the International Superstar Soccer Deluxe (USA) ROM.");
         return false;
     }
     return true;

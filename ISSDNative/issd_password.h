@@ -12,6 +12,9 @@ bool issd_password_set_context(const uint8_t *base, size_t base_size,
                                const uint8_t *effective, size_t effective_size,
                                uint32_t gameplay_flags);
 bool issd_password_available(void);
+/* SHA-256 of the one supported cartridge: International Superstar Soccer
+ * Deluxe (USA), without any copier header. */
+extern const uint8_t issd_supported_rom_sha256[32];
 bool issd_password_encode(const uint8_t *ram, uint8_t *symbols, size_t capacity, size_t *count);
 /* Decode and validate in private WRAM. Output is published only on success;
  * it is diagnostic/staging state, not a replacement for original restore flow. */

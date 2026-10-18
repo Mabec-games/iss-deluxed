@@ -12,7 +12,7 @@ static const uint8_t *s_rom;
 static size_t s_rom_size;
 static const char *s_error = "Password context unavailable";
 static const char *s_context_error = "Password context unavailable";
-static const uint8_t k_supported_sha256[32] = {
+const uint8_t issd_supported_rom_sha256[32] = {
     0xd2,0xfe,0x66,0xc1,0xce,0x66,0xc6,0x5c,0xe1,0x4e,0x47,0x8c,0x94,0xbe,0x2e,0x61,
     0x6f,0x9e,0x2c,0xad,0x37,0x4b,0x57,0x83,0xa6,0xa6,0x4d,0x3c,0x1a,0x99,0xcf,0xa9
 };
@@ -55,7 +55,7 @@ bool issd_password_set_context(const uint8_t *base, size_t base_size,
     if (!base || !effective || base_size != 0x200000 || effective_size != base_size)
         return Fail(s_context_error);
     uint8_t digest[32]; sha256_compute(base, base_size, digest);
-    if (memcmp(digest,k_supported_sha256,sizeof(digest)))
+    if (memcmp(digest,issd_supported_rom_sha256,sizeof(digest)))
         return Fail(s_context_error);
     if (gameplay_flags || memcmp(base,effective,base_size)) {
         s_context_error = "Retail passwords require unmodified gameplay data";
