@@ -569,3 +569,51 @@ IssdLaunchChoice issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_p
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS);
     return l.choice;
 }
+
+/* ---- in-game quit prompt ----------------------------------------------- */
+
+void issd_launcher_draw_quit_prompt(SDL_Renderer *renderer, bool yes_selected) {
+    static SDL_Renderer *baked_for;
+    static Font big, normal;
+    static SDL_Texture *ball;
+    static int ball_w, ball_h;
+    if (!renderer) return;
+    if (renderer != baked_for) {
+        /* Textures belong to one renderer; the launcher's window is gone. */
+        big = bake_font(renderer, 44);
+        normal = bake_font(renderer, 36);
+        ball = load_png(renderer, launcher_ball_png, sizeof launcher_ball_png, &ball_w, &ball_h);
+        baked_for = renderer;
+    }
+    int out_w = 0, out_h = 0;
+    SDL_GetRendererOutputSize(renderer, &out_w, &out_h);
+    float scale = (float)out_w / VIEW_W < (float)out_h / VIEW_H ? (float)out_w / VIEW_W : (float)out_h / VIEW_H;
+    if (scale <= 0) scale = 1;
+    SDL_BlendMode blend;
+    SDL_GetRenderDrawBlendMode(renderer, &blend);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_RenderSetScale(renderer, scale, scale);
+    const float vw = out_w / scale, vh = out_h / scale;
+
+    const SDL_Color gold = { 255, 214, 64, 255 }, plain = { 225, 230, 245, 255 };
+    fill_rect(renderer, (SDL_FRect){ 0, 0, vw, vh }, (SDL_Color){ 0, 0, 0, 120 });
+    const float panel_w = 560, panel_h = 200, top = (vh - panel_h) / 2;
+    fill_rect(renderer, (SDL_FRect){ (vw - panel_w) / 2, top, panel_w, panel_h }, (SDL_Color){ 6, 8, 16, 225 });
+    draw_text_centered(renderer, &big, "DO YOU WANT TO QUIT?", vw / 2, top + 36, gold);
+
+    const float y = top + 118, t = SDL_GetTicks() / 1000.0f;
+    static const char *labels[2] = { "YES", "NO" };
+    for (int i = 0; i < 2; i++) {
+        const float cx = vw / 2 + (i ? 110 : -110);
+        const bool focused = (i == 0) == yes_selected;
+        draw_text_centered(renderer, &normal, labels[i], cx, y, focused ? gold : plain);
+        if (focused && ball) {
+            float size = normal.size * 1.05f, bob = sinf(t * 5.0f) * 3.0f;
+            SDL_FRect b = { cx - text_width(&normal, labels[i]) / 2 - size - 18 + bob,
+                            y + (normal.size - size) / 2 + 2, size, size };
+            SDL_RenderCopyF(renderer, ball, NULL, &b);
+        }
+    }
+    SDL_RenderSetScale(renderer, 1.0f, 1.0f);
+    SDL_SetRenderDrawBlendMode(renderer, blend);
+}

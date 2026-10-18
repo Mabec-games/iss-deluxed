@@ -1651,12 +1651,77 @@ static bool IssdHandleLifecycleEvent(Uint32 type) {
     return false;
 }
 
+/* Esc asks "Do you want to quit?" (YES / NO, NO first). While it is up
+ * the game is paused and it takes every key and pad button. */
+static bool g_quit_prompt;
+static bool g_quit_prompt_yes;
+
+static void IssdQuitPromptClose(void) {
+    g_quit_prompt = false;
+    issd_input_block_held();
+    IssdBlockKeyboard();
+    g_pad1_state = 0;
+}
+
+static bool IssdQuitPromptEvent(const SDL_Event *ev) {
+    if (ev->type == SDL_KEYDOWN && !ev->key.repeat) {
+        SDL_Scancode code = ev->key.keysym.scancode;
+        if (!g_quit_prompt) {
+            if (code != SDL_SCANCODE_ESCAPE || issd_menu_is_open() || issd_menu_binding_capture()) return false;
+            g_quit_prompt = true;
+            g_quit_prompt_yes = false;
+            issd_input_block_held();
+            g_pad1_state = 0;
+            return true;
+        }
+        switch (code) {
+        case SDL_SCANCODE_LEFT: case SDL_SCANCODE_RIGHT: case SDL_SCANCODE_UP: case SDL_SCANCODE_DOWN:
+        case SDL_SCANCODE_A: case SDL_SCANCODE_D: case SDL_SCANCODE_W: case SDL_SCANCODE_S: case SDL_SCANCODE_TAB:
+            g_quit_prompt_yes = !g_quit_prompt_yes;
+            break;
+        case SDL_SCANCODE_RETURN: case SDL_SCANCODE_KP_ENTER: case SDL_SCANCODE_SPACE: case SDL_SCANCODE_X:
+            if (g_quit_prompt_yes) g_running = false;
+            else IssdQuitPromptClose();
+            break;
+        case SDL_SCANCODE_Y:
+            g_running = false;
+            break;
+        case SDL_SCANCODE_ESCAPE: case SDL_SCANCODE_N: case SDL_SCANCODE_Z: case SDL_SCANCODE_BACKSPACE:
+            IssdQuitPromptClose();
+            break;
+        default:
+            break;
+        }
+        return true;
+    }
+    if (!g_quit_prompt) return false;
+    if (ev->type == SDL_CONTROLLERBUTTONDOWN) {
+        switch (ev->cbutton.button) {
+        case SDL_CONTROLLER_BUTTON_DPAD_LEFT: case SDL_CONTROLLER_BUTTON_DPAD_RIGHT:
+        case SDL_CONTROLLER_BUTTON_DPAD_UP: case SDL_CONTROLLER_BUTTON_DPAD_DOWN:
+            g_quit_prompt_yes = !g_quit_prompt_yes;
+            break;
+        case SDL_CONTROLLER_BUTTON_A: case SDL_CONTROLLER_BUTTON_START:
+            if (g_quit_prompt_yes) g_running = false;
+            else IssdQuitPromptClose();
+            break;
+        case SDL_CONTROLLER_BUTTON_B: case SDL_CONTROLLER_BUTTON_BACK:
+            IssdQuitPromptClose();
+            break;
+        }
+        return true;
+    }
+    return ev->type == SDL_KEYDOWN || ev->type == SDL_KEYUP || ev->type == SDL_CONTROLLERBUTTONUP ||
+           ev->type == SDL_TEXTINPUT;
+}
+
 static void ProcessInputEvent(const SDL_Event *ev) {
     if (ev->type == SDL_RENDER_DEVICE_RESET || ev->type == SDL_RENDER_TARGETS_RESET) {
         g_renderer_reset_pending = true;
         return;
     }
     if (IssdHandleLifecycleEvent(ev->type)) return;
+    if (g_input_focused && IssdQuitPromptEvent(ev)) return;
     /* A preceding event can change gameplay settings in this same batch. */
     IssdRefreshSaveContext();
     if (ev->type == SDL_TEXTINPUT && g_input_focused && issd_menu_is_open() &&
@@ -2075,7 +2140,7 @@ static uint32_t g_input_idle_frames;
 
 /* At the end of the intro the game stops the song (command $EF) to load the
  * title music, cutting it mid-phrase. When that happens on its own, with
- * music playing and nobody pressing buttons, let the song run about 0.3 s
+ * music playing and nobody pressing buttons, let the song run about 0.8 s
  * longer first; the screen holds on the white flash meanwhile. */
 static void IssdApuCommandHook(uint8 port, uint16 val) {
     if (port != 0 || (val & 0xff) != 0xEF || !g_audio_producer_wait_enabled || g_input_idle_frames < 120)
@@ -2087,7 +2152,7 @@ static void IssdApuCommandHook(uint8 port, uint16 val) {
     bool audible = !IssdAudioQueueSilent(g_snes->apu->dsp);
     RtlApuUnlock();
     if (!audible) return;
-    for (int frame = 0; frame < 18; frame++) {
+    for (int frame = 0; frame < 48; frame++) {
         RtlApuLock();
         for (int cycle = 0; cycle < 17088; cycle++) apu_cycle(g_snes->apu);
         RtlApuUnlock();
@@ -2666,6 +2731,13 @@ int main(int argc, char **argv) {
         /* Native SPC hardware is reset and advanced internally during return.
          * Keep its audio consumer paused until the verified menu is reached. */
         bool should_pause_audio = issd_menu_is_open() || g_main_menu_requested || g_main_menu_returning;
+        if (g_quit_prompt) {
+            bool online = false;
+#ifdef SNESRECOMP_NET
+            online = g_net_mode != 0;
+#endif
+            if (!online) should_pause_audio = true;
+        }
         g_audio_producer_wait_enabled = audio_dev && !should_pause_audio;
         if (audio_dev && audio_paused != should_pause_audio) {
             audio_paused = should_pause_audio;
@@ -2737,8 +2809,17 @@ int main(int argc, char **argv) {
             continue;
         }
 
+        bool quit_prompt_pauses = g_quit_prompt;
+#ifdef SNESRECOMP_NET
+        if (g_net_mode) quit_prompt_pauses = false;   /* the opponent's game keeps going */
+#endif
         if (g_headless || now >= next_sim_time) {
-            if (issd_menu_is_open()) {
+            if (quit_prompt_pauses) {
+                issd_input_block_held();
+                IssdBlockKeyboard();
+                g_pad1_state = 0;
+                frame_simulated = true;
+            } else if (issd_menu_is_open()) {
                 issd_input_block_held();
                 IssdBlockKeyboard();
                 bool capturing = issd_menu_binding_capture();
@@ -2766,6 +2847,7 @@ int main(int argc, char **argv) {
                     if (g_input_focused || g_headless) local |= g_pad1_state | issd_touch_pad_mask();
                     if (issd_script_active() && (issd_script_players() & 1u))
                         local = (uint16_t)issd_script_mask_player(frame_count, 0);
+                    if (g_quit_prompt) local = 0;
                     snes_netplay_stage_local(local & 0xfff);
                     if (!snes_netplay_poll_admit()) goto net_frame_stalled;
                 }
@@ -3170,6 +3252,9 @@ net_frame_stalled:;
                         SDL_RenderCopy(renderer,menu_texture,NULL,NULL);
                     }
                 }
+#ifdef ISSD_LAUNCHER
+                if (g_quit_prompt) issd_launcher_draw_quit_prompt(renderer, g_quit_prompt_yes);
+#endif
                 uint64_t present_cpu_end = g_graphics_report_path ? SDL_GetPerformanceCounter() : 0;
                 SDL_RenderPresent(renderer);
                 last_present_time = SDL_GetPerformanceCounter();

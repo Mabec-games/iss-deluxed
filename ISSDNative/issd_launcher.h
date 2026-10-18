@@ -26,6 +26,11 @@ IssdLaunchChoice issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_p
  * (USA) image. `why` receives a short reason when it is not. */
 bool issd_launcher_rom_ok(const char *path, char *why, size_t why_size);
 
+/* The in-game "Do you want to quit?" box (Esc), drawn over the game in the
+ * launcher's style on the game's renderer. */
+struct SDL_Renderer;
+void issd_launcher_draw_quit_prompt(struct SDL_Renderer *renderer, bool yes_selected);
+
 #ifdef __cplusplus
 }
 #endif
