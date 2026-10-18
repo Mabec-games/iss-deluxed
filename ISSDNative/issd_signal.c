@@ -339,6 +339,9 @@ void issd_signal_pump(void) {
             if (!start_broker()) S.open = false;
             return;
         }
+        /* Still connecting: Windows fails recv with WSAENOTCONN here, where
+         * Linux only reports EAGAIN, so wait for the connect to finish. */
+        if (S.started) return;
     }
     read_socket();
     if (S.ready && now - S.last_ping > PING_MS) {
