@@ -56,11 +56,13 @@ static bool sock_startup(void) { return true; }
 #endif
 
 /* Public brokers, tried in this order by both players so they meet on the
- * same one. All are free test services without accounts. */
-static const char *const k_brokers[] = { "broker.hivemq.com", "broker.emqx.io", "test.mosquitto.org" };
+ * same one. All are free test services without accounts. HiveMQ comes last:
+ * it now often accepts TCP and then never answers, or refuses the sign-in. */
+static const char *const k_brokers[] = { "broker.emqx.io", "test.mosquitto.org", "broker.hivemq.com" };
 enum {
     BROKER_COUNT = 3,
     CONNECT_MS = 4000,          /* per broker */
+    SIGNIN_MS = 5000,           /* per broker, from TCP connect to SUBACK */
     KEEPALIVE_S = 60,
     PING_MS = 20000,
     KEY_ROUNDS = 20000,         /* slows down guessing a code from its channel name */
@@ -74,7 +76,7 @@ static struct {
     bool open, host, ready, matched;
     Sock fd;
     int broker;
-    Uint32 started, last_ping;
+    Uint32 started, signin, last_ping;
     uint8_t key[32], mac_key[32];
     char inbox[96], outbox[96];
     uint8_t rx[8192];
@@ -338,7 +340,7 @@ void issd_signal_pump(void) {
             int err = 0;
             socklen_t l = sizeof err;
             getsockopt(S.fd, SOL_SOCKET, SO_ERROR, (char *)&err, &l);
-            if (err == 0) { S.started = 0; send_connect(); }
+            if (err == 0) { S.started = 0; S.signin = now; send_connect(); }
             else close_socket();                        /* refused or unreachable */
         } else if (now - S.started > CONNECT_MS) {
             close_socket();
@@ -352,7 +354,10 @@ void issd_signal_pump(void) {
          * Linux only reports EAGAIN, so wait for the connect to finish. */
         if (S.started) return;
     }
-    read_socket();
+    if (!S.ready && now - S.signin > SIGNIN_MS)
+        close_socket();                         /* connected but silent: try the next */
+    else
+        read_socket();
     if (S.fd == BAD_SOCK && !S.error[0]) {      /* turned away: try the next broker */
         S.broker++;
         if (!start_broker()) S.open = false;
