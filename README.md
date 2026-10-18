@@ -15,6 +15,8 @@
 - **Enhanced animation** for running and walking, applied to every player.
 - **Linux AppImage** for Debian 12+, Ubuntu 22.04+, Fedora 35+ and similar.
 
+<p align="center"><img src="docs/images/title.png" width="49%"> <img src="docs/images/gameplay.png" width="49%"></p>
+
 
 A native recompilation and modernization of **International Superstar Soccer Deluxe (USA)** for the Super Nintendo. The original 65816 code is translated into C, with native replacements for asset decompression, memory streaming, and audio command handling. The runner retains SNES hardware models for video, audio, and other peripherals.
 

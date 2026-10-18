@@ -97,3 +97,4 @@ tools/mod_studio/__pycache__/
 
 # Launcher art is embedded into the build and must be tracked.
 !assets/launcher/*.png
+!docs/images/*.png
