@@ -2756,9 +2756,12 @@ int main(int argc, char **argv) {
                                             g_ws_active ? g_ws_extra : 0);
                 {
                     int lx = 0, ly = 0, lw = 0, lh = 0;
-                    issd_title_logo_apply(g_pixel_buffer, cur_render_w, cur_render_h,
-                                          g_ws_active ? g_ws_extra : 0, &lx, &ly, &lw, &lh);
-                    issd_hd_set_exclusion(lx, ly, lw, lh);
+                    const uint8_t *changed = NULL;
+                    if (!issd_title_logo_apply(g_pixel_buffer, cur_render_w, cur_render_h,
+                                               g_ws_active ? g_ws_extra : 0,
+                                               &lx, &ly, &lw, &lh, &changed))
+                        lw = lh = 0;
+                    issd_hd_set_exclusion(lx, ly, lw, lh, changed);
                 }
                 if (g_main_menu_returning) {
                     /* The destination is the native menu; show progress while

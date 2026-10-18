@@ -23,9 +23,12 @@ bool issd_title_logo_load(const char *mods_dir);
 
 /* Draw the replacement into a native frame `width` x `height` whose
  * authentic 256 columns start at `margin_left`. Returns true when drawn,
- * and reports the covered box so higher-resolution passes can skip it. */
+ * and reports the box it worked in plus a box_w*box_h mask of the pixels it
+ * changed, so higher-resolution passes leave just those alone. The mask
+ * stays valid until the next call. */
 bool issd_title_logo_apply(uint32_t *frame, int width, int height, int margin_left,
-                           int *box_x, int *box_y, int *box_w, int *box_h);
+                           int *box_x, int *box_y, int *box_w, int *box_h,
+                           const uint8_t **changed);
 
 #ifdef __cplusplus
 }
