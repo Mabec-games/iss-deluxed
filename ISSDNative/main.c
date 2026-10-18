@@ -2140,7 +2140,7 @@ static uint32_t g_input_idle_frames;
 
 /* At the end of the intro the game stops the song (command $EF) to load the
  * title music, cutting it mid-phrase. When that happens on its own, with
- * music playing and nobody pressing buttons, let the song run about 0.8 s
+ * music playing and nobody pressing buttons, let the song run about 1.1 s
  * longer first; the screen holds on the white flash meanwhile. */
 static void IssdApuCommandHook(uint8 port, uint16 val) {
     if (port != 0 || (val & 0xff) != 0xEF || !g_audio_producer_wait_enabled || g_input_idle_frames < 120)
@@ -2152,7 +2152,7 @@ static void IssdApuCommandHook(uint8 port, uint16 val) {
     bool audible = !IssdAudioQueueSilent(g_snes->apu->dsp);
     RtlApuUnlock();
     if (!audible) return;
-    for (int frame = 0; frame < 48; frame++) {
+    for (int frame = 0; frame < 66; frame++) {
         RtlApuLock();
         for (int cycle = 0; cycle < 17088; cycle++) apu_cycle(g_snes->apu);
         RtlApuUnlock();
