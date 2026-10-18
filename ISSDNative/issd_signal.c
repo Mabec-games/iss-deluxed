@@ -1,5 +1,14 @@
 #include "issd_signal.h"
 
+#ifdef _WIN32
+#define _CRT_RAND_S             /* rand_s() from stdlib.h */
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0600     /* Vista+: WSAPoll and POLLOUT */
+#endif
+/* Before anything that may pull in windows.h, which clashes with these. */
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,13 +19,40 @@
 #include "sha256.h"
 #include "snes_lobby_client.h"
 
-#ifndef _WIN32
+/* The few socket calls used here, on Winsock and on POSIX. */
+#ifdef _WIN32
+typedef SOCKET Sock;
+#define BAD_SOCK INVALID_SOCKET
+#define close_sock closesocket
+#define poll_sock WSAPoll
+#define SEND_FLAGS 0
+static int sock_error(void) { return WSAGetLastError(); }
+static bool sock_would_block(int e) { return e == WSAEWOULDBLOCK || e == WSAEINTR; }
+static bool sock_connecting(int e) { return e == WSAEWOULDBLOCK || e == WSAEINPROGRESS; }
+static void sock_nonblocking(Sock s) { u_long on = 1; ioctlsocket(s, FIONBIO, &on); }
+static bool sock_startup(void) {
+    static bool started;
+    WSADATA data;
+    if (!started && WSAStartup(MAKEWORD(2, 2), &data) == 0) started = true;
+    return started;
+}
+#else
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <poll.h>
 #include <sys/socket.h>
 #include <unistd.h>
+typedef int Sock;
+#define BAD_SOCK (-1)
+#define close_sock close
+#define poll_sock poll
+#define SEND_FLAGS MSG_NOSIGNAL
+static int sock_error(void) { return errno; }
+static bool sock_would_block(int e) { return e == EAGAIN || e == EWOULDBLOCK || e == EINTR; }
+static bool sock_connecting(int e) { return e == EINPROGRESS; }
+static void sock_nonblocking(Sock s) { fcntl(s, F_SETFL, fcntl(s, F_GETFL, 0) | O_NONBLOCK); }
+static bool sock_startup(void) { return true; }
 #endif
 
 /* Public brokers, tried in this order by both players so they meet on the
@@ -36,7 +72,8 @@ typedef struct { char kind; uint16_t len; uint8_t data[MAX_PAYLOAD]; } Message;
 
 static struct {
     bool open, host, ready, matched;
-    int fd, broker;
+    Sock fd;
+    int broker;
     Uint32 started, last_ping;
     uint8_t key[32], mac_key[32];
     char inbox[96], outbox[96];
@@ -48,7 +85,7 @@ static struct {
     SnesLobbyJoinInfo join;
     uint8_t welcome[64];        /* host: repeated if the guest says hello again */
     size_t welcome_len;
-} S = { .fd = -1 };
+} S = { .fd = BAD_SOCK };
 
 /* ---- crypto: SHA-256 in counter mode with a SHA-256 tag, keyed by the code */
 
@@ -62,7 +99,9 @@ static void hash2(const void *a, size_t alen, const void *b, size_t blen, uint8_
 
 static void random_bytes(uint8_t *out, size_t n) {
     size_t got = 0;
-#ifndef _WIN32
+#ifdef _WIN32
+    for (unsigned int r; got < n && rand_s(&r) == 0; got++) out[got] = (uint8_t)r;
+#else
     FILE *f = fopen("/dev/urandom", "rb");
     if (f) { got = fread(out, 1, n, f); fclose(f); }
 #endif
@@ -91,27 +130,20 @@ static void tag(const uint8_t *nonce_and_ct, size_t len, uint8_t out[32]) {
 /* ---- MQTT 3.1.1, QoS 0, over plain TCP ---------------------------------- */
 
 static void close_socket(void) {
-#ifndef _WIN32
-    if (S.fd >= 0) close(S.fd);
-#endif
-    S.fd = -1;
+    if (S.fd != BAD_SOCK) close_sock(S.fd);
+    S.fd = BAD_SOCK;
     S.ready = false;
     S.rx_len = 0;
 }
 
 static bool send_all(const uint8_t *p, size_t n) {
-#ifndef _WIN32
     while (n) {
-        ssize_t w = send(S.fd, p, n, MSG_NOSIGNAL);
-        if (w < 0 && (errno == EAGAIN || errno == EINTR)) { SDL_Delay(1); continue; }
+        int w = (int)send(S.fd, (const char *)p, (int)n, SEND_FLAGS);
+        if (w < 0 && sock_would_block(sock_error())) { SDL_Delay(1); continue; }
         if (w <= 0) return false;
         p += w; n -= (size_t)w;
     }
     return true;
-#else
-    (void)p; (void)n;
-    return false;
-#endif
 }
 
 static size_t put_length(uint8_t *out, size_t len) {
@@ -135,18 +167,18 @@ static size_t put_string(uint8_t *out, const char *s) {
 }
 
 static bool start_broker(void) {
-#ifndef _WIN32
-    while (S.broker < BROKER_COUNT) {
+    while (sock_startup() && S.broker < BROKER_COUNT) {
         struct addrinfo hints = {0}, *res = NULL;
         hints.ai_family = AF_UNSPEC;
         hints.ai_socktype = SOCK_STREAM;
         if (getaddrinfo(k_brokers[S.broker], "1883", &hints, &res) == 0 && res) {
             S.fd = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-            if (S.fd >= 0) {
-                fcntl(S.fd, F_SETFL, fcntl(S.fd, F_GETFL, 0) | O_NONBLOCK);
-                int rc = connect(S.fd, res->ai_addr, res->ai_addrlen);
+            if (S.fd != BAD_SOCK) {
+                sock_nonblocking(S.fd);
+                int rc = connect(S.fd, res->ai_addr, (int)res->ai_addrlen);
+                int e = rc == 0 ? 0 : sock_error();
                 freeaddrinfo(res);
-                if (rc == 0 || errno == EINPROGRESS) { S.started = SDL_GetTicks(); return true; }
+                if (rc == 0 || sock_connecting(e)) { S.started = SDL_GetTicks(); return true; }
                 close_socket();
             } else {
                 freeaddrinfo(res);
@@ -154,7 +186,6 @@ static bool start_broker(void) {
         }
         S.broker++;
     }
-#endif
     snprintf(S.error, sizeof S.error, "Could not reach the online matchmaking service. Check your internet connection.");
     return false;
 }
@@ -231,12 +262,11 @@ static void handle_packet(uint8_t type, const uint8_t *p, size_t len) {
 }
 
 static void read_socket(void) {
-#ifndef _WIN32
     for (;;) {
         if (S.rx_len == sizeof S.rx) { S.rx_len = 0; return; }   /* oversized: drop */
-        ssize_t r = recv(S.fd, S.rx + S.rx_len, sizeof S.rx - S.rx_len, 0);
+        int r = (int)recv(S.fd, (char *)S.rx + S.rx_len, (int)(sizeof S.rx - S.rx_len), 0);
         if (r > 0) { S.rx_len += (size_t)r; continue; }
-        if (r == 0 || (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR)) {
+        if (r == 0 || !sock_would_block(sock_error())) {
             close_socket();
             snprintf(S.error, sizeof S.error, "Lost the connection to the matchmaking service.");
         }
@@ -256,7 +286,6 @@ static void read_socket(void) {
         memmove(S.rx, S.rx + head + len, S.rx_len - head - len);
         S.rx_len -= head + len;
     }
-#endif
 }
 
 /* ---- public API ------------------------------------------------------------ */
@@ -286,27 +315,26 @@ bool issd_signal_open(const char *code, bool host) {
 }
 
 void issd_signal_close(void) {
-    if (S.fd >= 0 && S.ready) mqtt_packet(0xE0, NULL, 0);     /* DISCONNECT */
+    if (S.fd != BAD_SOCK && S.ready) mqtt_packet(0xE0, NULL, 0);     /* DISCONNECT */
     close_socket();
     S.open = S.matched = false;
     S.control_count = S.signal_count = 0;
 }
 
 void issd_signal_pump(void) {
-#ifndef _WIN32
-    if (!S.open || S.fd < 0) return;
+    if (!S.open || S.fd == BAD_SOCK) return;
     Uint32 now = SDL_GetTicks();
     if (!S.ready && S.started) {
         struct pollfd pfd = { S.fd, POLLOUT, 0 };
-        if (poll(&pfd, 1, 0) > 0 && (pfd.revents & POLLOUT)) {
+        if (poll_sock(&pfd, 1, 0) > 0 && (pfd.revents & POLLOUT)) {
             int err = 0;
             socklen_t l = sizeof err;
-            getsockopt(S.fd, SOL_SOCKET, SO_ERROR, &err, &l);
+            getsockopt(S.fd, SOL_SOCKET, SO_ERROR, (char *)&err, &l);
             if (err == 0) { S.started = 0; send_connect(); }
         } else if (now - S.started > CONNECT_MS) {
             close_socket();
         }
-        if (S.fd < 0) {                 /* this broker failed: try the next */
+        if (S.fd == BAD_SOCK) {         /* this broker failed: try the next */
             S.broker++;
             if (!start_broker()) S.open = false;
             return;
@@ -317,7 +345,6 @@ void issd_signal_pump(void) {
         mqtt_packet(0xC0, NULL, 0);
         S.last_ping = now;
     }
-#endif
 }
 
 bool issd_signal_ready(void) { return S.open && S.ready; }
