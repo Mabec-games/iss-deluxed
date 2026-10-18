@@ -871,6 +871,11 @@ void issd_hd_composite(const Ppu *ppu,
         memcpy(s_scanout_source.cgram, s_line_cgram[y], sizeof ppu->cgram);
         memcpy(s_scanout_source.brightnessMult, s_line_brightness[y], sizeof ppu->brightnessMult);
         ppu = &s_scanout_source;
+        /* Replacements follow the master brightness like the native pixels
+         * they stand in for: a fading screen fades its HD art too, and a
+         * black line (where every native pixel "matches" black) gets none. */
+        const unsigned bright = s_line_brightness[y][31];
+        if (!bright) continue;
         /* Palette/graphics can change between scanlines even at one address. */
         s_generation++;
         const int mode = r->bgmode & 7;
@@ -985,7 +990,11 @@ void issd_hd_composite(const Ppu *ppu,
                             if (((tile & 0x4000) != 0) ^
                                 (in_margin && r->marginPolicy[layer] == 3)) u = ts - 1 - u;
                             const uint32_t t = src[u];
-                            if (t >> 24) dst[sx2] = t & 0xFFFFFFu;
+                            if (!(t >> 24)) continue;
+                            dst[sx2] = bright >= 255 ? t & 0xFFFFFFu :
+                                ((t >> 16 & 255) * bright / 255) << 16 |
+                                ((t >> 8 & 255) * bright / 255) << 8 |
+                                (t & 255) * bright / 255;
                         }
                     }
                     s_last_hits++;

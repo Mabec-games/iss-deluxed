@@ -3052,7 +3052,9 @@ int main(int argc, char **argv) {
                 {
                     int lx = 0, ly = 0, lw = 0, lh = 0;
                     const uint8_t *changed = NULL;
-                    if (!issd_title_logo_apply(g_pixel_buffer, cur_render_w, cur_render_h,
+                    /* Mode 1 is the boot sequence: Konami logo, intro, title. */
+                    if (g_ram[0x32] != 1 ||
+                        !issd_title_logo_apply(g_pixel_buffer, cur_render_w, cur_render_h,
                                                g_ws_active ? g_ws_extra : 0,
                                                &lx, &ly, &lw, &lh, &changed))
                         lw = lh = 0;

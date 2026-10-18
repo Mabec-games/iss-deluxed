@@ -247,28 +247,61 @@ static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int ri
     return true;
 }
 
-/* Frames that do not match a reference near-exactly are the animation, a
- * fade or another screen, and are left alone. */
+static uint32_t scale_colour(uint32_t c, const int k[3]);
+
+/* The brightness of a fade, per channel in 1/256ths, from one pixel known to
+ * be plain background in the reference. False when nearly black. */
+static bool fade_level(const uint32_t *frame, int width, int x0, int y0,
+                       uint32_t reference, int k[3]) {
+    const uint32_t cur = frame[(size_t)y0 * width + x0] & 0xFFFFFFu;
+    for (int i = 0; i < 3; i++) {
+        int ref = (int)(reference >> (16 - 8 * i) & 255), now = (int)(cur >> (16 - 8 * i) & 255);
+        if (ref < 32 || now > ref + 8) return false;
+        k[i] = now * 256 / ref;
+    }
+    return k[0] >= 8;
+}
+
+/* Frames that do not match the reference, at the fade's brightness, are the
+ * animation or another screen, and are left alone. */
 static bool matches(const uint32_t *frame, int width, int x0, int y0,
-                    const uint32_t *ref, int w, int h) {
+                    const uint32_t *ref, int w, int h, const int k[3]) {
+    const bool full = k[0] >= 256 && k[1] >= 256 && k[2] >= 256;
     size_t same = 0, total = (size_t)w * h;
     for (int y = 0; y < h; y++) {
         const uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
-        for (int x = 0; x < w; x++) same += ((row[x] ^ ref[(size_t)y * w + x]) & 0xFFFFFFu) == 0;
+        for (int x = 0; x < w; x++) {
+            const uint32_t got = row[x] & 0xFFFFFFu, r = ref[(size_t)y * w + x] & 0xFFFFFFu;
+            if (full) { same += got == r; continue; }
+            const uint32_t want = scale_colour(r, k);
+            same += abs((int)(want >> 16 & 255) - (int)(got >> 16 & 255)) +
+                    abs((int)(want >> 8 & 255) - (int)(got >> 8 & 255)) +
+                    abs((int)(want & 255) - (int)(got & 255)) <= 24;
+        }
     }
-    return same * 100 >= total * 97;
+    return same * 100 >= total * (full ? 97 : 95);
 }
 
 static bool apply_logo(uint32_t *frame, int width, int height, int margin_left) {
     if (!s_logo) return false;
     const int x0 = margin_left + LOGO_X, y0 = LOGO_Y;
     if (x0 < 0 || x0 + s_w > width || y0 + s_h > height) return false;
-    if (!matches(frame, width, x0, y0, s_reference, s_w, s_h))
+    int k[3];
+    if (!fade_level(frame, width, x0, y0, s_reference[0] & 0xFFFFFFu, k) ||
+        !matches(frame, width, x0, y0, s_reference, s_w, s_h, k))
         return replace_lettering(frame, width, x0, y0, width);  /* fly-in reaches the margin */
+    const bool full = k[0] >= 256 && k[1] >= 256 && k[2] >= 256;
     for (int y = 0; y < s_h; y++) {
-        const uint32_t *src = s_logo + (size_t)y * s_w;
-        for (int x = 0; x < s_w; x++)
-            if (src[x] >> 24) put(frame, width, x0 + x, y0 + y, src[x]);
+        const uint32_t *src = s_logo + (size_t)y * s_w, *ref = s_reference + (size_t)y * s_w;
+        for (int x = 0; x < s_w; x++) {
+            if (!(src[x] >> 24)) continue;
+            /* Where the new logo equals the old, keep the game's own pixel:
+             * mid-fade it rounds slightly differently from a rescaled one. */
+            if (!full && !((src[x] ^ ref[x]) & 0xFFFFFFu))
+                s_changed[(size_t)(y0 + y) * s_cw + x0 + x] = 1;
+            else
+                put(frame, width, x0 + x, y0 + y, full ? src[x] : scale_colour(src[x], k));
+        }
     }
     if (s_old)                      /* the old lettering's tiles, as above */
         for (int i = 0; i < s_w * s_h; i++)
@@ -290,15 +323,8 @@ static bool apply_credit(uint32_t *frame, int width, int height, int margin_left
     if (!s_credit) return false;
     const int x0 = margin_left + CREDIT_X, y0 = CREDIT_Y;
     if (x0 < 0 || x0 + s_credit_w > width || y0 + s_credit_h > height) return false;
-    const uint32_t ref_bg = s_credit_reference[0] & 0xFFFFFFu;    /* plain background */
-    const uint32_t cur_bg = frame[(size_t)y0 * width + x0] & 0xFFFFFFu;
-    int k[3];
-    for (int i = 0; i < 3; i++) {
-        int ref = (int)(ref_bg >> (16 - 8 * i) & 255), cur = (int)(cur_bg >> (16 - 8 * i) & 255);
-        if (ref < 32 || cur > ref + 8) return false;
-        k[i] = cur * 256 / ref;
-    }
-    if (k[0] < 32) return false;                                   /* almost black */
+    int k[3];                                    /* corner: plain background */
+    if (!fade_level(frame, width, x0, y0, s_credit_reference[0] & 0xFFFFFFu, k)) return false;
     size_t letters = 0, present = 0;
     for (int y = 0; y < s_credit_h; y++)
         for (int x = 0; x < s_credit_w; x++) {
