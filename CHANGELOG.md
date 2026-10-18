@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## ISS DELUXE'd 1.0.0 — 2026-10-18
+
+First full release of ISS DELUXE'd, a non-commercial fork of ISSD Native. It
+has its own version numbers from here on; the entries below this one are
+upstream ISSD Native's.
+
+- Launcher (ROM check, PLAY / ONLINE / OPTIONS / CONTROLS / QUIT).
+- Online play with invite codes, Windows and Linux together, peer to peer.
+- Fit Pixel Perfect widescreen, widescreen menus, edge fill, full-width weather.
+- Enhanced running and walking animation, new title screen with HD art.
+- Intro music fix, Esc quit prompt, reconnecting controllers keep their slot.
+- Windows build with the golden-ball icon and a Linux AppImage.
+
 ## 0.5.0-beta.3 — 2026-10-10
 
 - Replace misleading fixed touch action names with native A/B/X/Y letters.
