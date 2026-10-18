@@ -35,6 +35,30 @@ add_executable(ISSDNative
     ${ISSD_GAME_SOURCES}
 )
 
+# Launcher: logo, golden ball and font embedded as C arrays (tools/embed.py),
+# so a release cannot lose them.
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+set(ISSD_LAUNCHER_ASSETS_H ${CMAKE_BINARY_DIR}/gen/generated/launcher_assets.h)
+add_custom_command(
+    OUTPUT ${ISSD_LAUNCHER_ASSETS_H}
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_BINARY_DIR}/gen/generated
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/embed.py ${ISSD_LAUNCHER_ASSETS_H}
+        launcher_logo_png=${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.png
+        launcher_ball_png=${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/ball.png
+        launcher_font_ttf=${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/DejaVuSans-Bold.ttf
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/tools/embed.py
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/logo.png
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/ball.png
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets/launcher/DejaVuSans-Bold.ttf
+    VERBATIM)
+target_sources(ISSDNative PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative/issd_launcher.c"
+    ${ISSD_LAUNCHER_ASSETS_H})
+target_include_directories(ISSDNative PRIVATE
+    "${CMAKE_BINARY_DIR}/gen"
+    "${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb")
+target_compile_definitions(ISSDNative PRIVATE ISSD_LAUNCHER=1)
+
 # Final build: no in-game menu or hotkeys, and the remaster look applied on
 # every start. Developer builds keep the overlay for testing.
 option(ISSD_FINAL_BUILD "Build without the in-game menu" OFF)

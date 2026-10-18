@@ -25,6 +25,9 @@
 #include "issd_config.h"
 #include "issd_video.h"
 #include "issd_title_logo.h"
+#ifdef ISSD_LAUNCHER
+#include "issd_launcher.h"
+#endif
 #ifdef SNESRECOMP_NET
 #include "snes_netplay.h"
 #endif
@@ -2064,6 +2067,7 @@ int main(int argc, char **argv) {
 #endif
     const char *cli_config_path = NULL;
     const char *cli_rom_path = NULL;
+    bool no_launcher = false;
     const char *cli_mods_dir = NULL;
     const char *cli_save_dir = NULL;
     for (int i = 1; i < argc; i++) {
@@ -2137,6 +2141,8 @@ int main(int argc, char **argv) {
             sscanf(argv[++i], "%d:%d", &g_dump_first, &g_dump_last);
         } else if (strcmp(argv[i], "--config") == 0 && i + 1 < argc) {
             cli_config_path = argv[++i];
+        } else if (strcmp(argv[i], "--no-launcher") == 0) {
+            no_launcher = true;
         } else if (strcmp(argv[i], "--rom") == 0 && i + 1 < argc) {
             cli_rom_path = argv[++i];
         } else if (strcmp(argv[i], "--mods-dir") == 0 && i + 1 < argc) {
@@ -2212,6 +2218,18 @@ int main(int argc, char **argv) {
 
     char rom_path_buffer[ISSD_CONFIG_ROM_PATH_MAX];
     rom_path_buffer[0] = '\0';
+#ifdef ISSD_LAUNCHER
+    /* Players start without --rom and get the launcher; it picks the ROM
+     * and the options, or quits. Command-line and test runs skip it. */
+    static char launcher_rom[ISSD_CONFIG_ROM_PATH_MAX];
+    if (!g_headless && !no_launcher && !(cli_rom_path && cli_rom_path[0])) {
+        snprintf(launcher_rom, sizeof launcher_rom, "%s", g_issd_config.rom_path);
+        bool play = issd_launcher_run(&g_issd_config, launcher_rom, sizeof launcher_rom);
+        issd_config_save(&g_issd_config, NULL);
+        if (!play) return 0;
+        cli_rom_path = launcher_rom;
+    }
+#endif
     bool picked_rom = false;
     if (cli_rom_path && cli_rom_path[0]) {
         snprintf(rom_path_buffer, sizeof(rom_path_buffer), "%s", cli_rom_path);

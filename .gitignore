@@ -94,3 +94,6 @@ tools/mod_studio/__pycache__/
 
 # Original authored stadium example resources (no cartridge pixels).
 !mods/independent_stadium_example/**/*.bin
+
+# Launcher art is embedded into the build and must be tracked.
+!assets/launcher/*.png
