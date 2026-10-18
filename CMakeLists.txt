@@ -35,6 +35,12 @@ add_executable(ISSDNative
     ${ISSD_GAME_SOURCES}
 )
 
+# Delay-sync two-player netplay (recomp-net, LAN transport for now).
+option(ISSD_NETPLAY "Build two-player netplay" ON)
+if(ISSD_NETPLAY)
+    snesrecomp_enable_recomp_net(ISSDNative)
+endif()
+
 target_include_directories(ISSDNative PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/recomp/config"
     "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative"
