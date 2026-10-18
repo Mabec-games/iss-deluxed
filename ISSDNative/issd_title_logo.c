@@ -6,12 +6,13 @@
 
 /* Top-left of the logo box and the bottom credit line in the authentic
  * 256-pixel view (tools/build_title_logo.py, tools/build_title_credit.py). */
-enum { LOGO_X = 18, LOGO_Y = 26, CREDIT_X = 8, CREDIT_Y = 203 };
+enum { LOGO_X = 18, LOGO_Y = 26, CREDIT_X = 8, CREDIT_Y = 213 };
 
 static uint32_t *s_logo, *s_reference;
 static int s_w, s_h;
-/* The credit lines under the photos, swapped the same way. */
-static uint32_t *s_credit, *s_credit_reference;
+/* The "LICENSED BY NINTENDO" line under the photos: the new banner, the
+ * original line, and what lies behind it. */
+static uint32_t *s_credit, *s_credit_reference, *s_credit_behind;
 static int s_credit_w, s_credit_h;
 
 /* The lettering flies in as a scaled sprite over a still brushstroke, so
@@ -94,20 +95,22 @@ done:
 
 static void load_credit(const char *mods_dir) {
     char path[1024];
-    int cw = 0, ch = 0, rw = 0, rh = 0;
-    free(s_credit); free(s_credit_reference);
-    s_credit = s_credit_reference = NULL;
+    int cw = 0, ch = 0, rw = 0, rh = 0, bw = 0, bh = 0;
+    free(s_credit); free(s_credit_reference); free(s_credit_behind);
+    s_credit = s_credit_reference = s_credit_behind = NULL;
     snprintf(path, sizeof path, "%s/title_logo/credit.bmp", mods_dir);
     uint32_t *credit = load_bmp(path, &cw, &ch);
     snprintf(path, sizeof path, "%s/title_logo/credit_reference.bmp", mods_dir);
     uint32_t *reference = load_bmp(path, &rw, &rh);
-    if (credit && reference && cw == rw && ch == rh &&
+    snprintf(path, sizeof path, "%s/title_logo/credit_behind.bmp", mods_dir);
+    uint32_t *behind = load_bmp(path, &bw, &bh);
+    if (credit && reference && behind && cw == rw && ch == rh && cw == bw && ch == bh &&
         CREDIT_X + cw <= 256 && CREDIT_Y + ch <= 224) {
-        s_credit = credit; s_credit_reference = reference;
+        s_credit = credit; s_credit_reference = reference; s_credit_behind = behind;
         s_credit_w = cw; s_credit_h = ch;
         return;
     }
-    free(credit); free(reference);
+    free(credit); free(reference); free(behind);
 }
 
 bool issd_title_logo_load(const char *mods_dir) {
@@ -271,15 +274,51 @@ static bool apply_logo(uint32_t *frame, int width, int height, int margin_left) 
     return true;
 }
 
+static uint32_t scale_colour(uint32_t c, const int k[3]) {
+    int r = (int)(c >> 16 & 255) * k[0] / 256, g = (int)(c >> 8 & 255) * k[1] / 256,
+        b = (int)(c & 255) * k[2] / 256;
+    return (uint32_t)(r > 255 ? 255 : r) << 16 | (uint32_t)(g > 255 ? 255 : g) << 8 |
+           (uint32_t)(b > 255 ? 255 : b);
+}
+
+/* The line fades in with the title, so it is recognised by its own letter
+ * pixels at the brightness of the plain background beside it, and the
+ * banner is drawn at that same brightness. */
 static bool apply_credit(uint32_t *frame, int width, int height, int margin_left) {
     if (!s_credit) return false;
     const int x0 = margin_left + CREDIT_X, y0 = CREDIT_Y;
     if (x0 < 0 || x0 + s_credit_w > width || y0 + s_credit_h > height) return false;
-    if (!matches(frame, width, x0, y0, s_credit_reference, s_credit_w, s_credit_h)) return false;
+    const uint32_t ref_bg = s_credit_reference[0] & 0xFFFFFFu;    /* plain background */
+    const uint32_t cur_bg = frame[(size_t)y0 * width + x0] & 0xFFFFFFu;
+    int k[3];
+    for (int i = 0; i < 3; i++) {
+        int ref = (int)(ref_bg >> (16 - 8 * i) & 255), cur = (int)(cur_bg >> (16 - 8 * i) & 255);
+        if (ref < 32 || cur > ref + 8) return false;
+        k[i] = cur * 256 / ref;
+    }
+    if (k[0] < 32) return false;                                   /* almost black */
+    size_t letters = 0, present = 0;
     for (int y = 0; y < s_credit_h; y++)
         for (int x = 0; x < s_credit_w; x++) {
-            const uint32_t c = s_credit[(size_t)y * s_credit_w + x];
-            if (c >> 24) put(frame, width, x0 + x, y0 + y, c);
+            const size_t i = (size_t)y * s_credit_w + x;
+            if (((s_credit_reference[i] ^ s_credit_behind[i]) & 0xFFFFFFu) == 0) continue;
+            letters++;
+            uint32_t want = scale_colour(s_credit_reference[i], k);
+            uint32_t got = frame[(size_t)(y0 + y) * width + x0 + x] & 0xFFFFFFu;
+            int d = abs((int)(want >> 16 & 255) - (int)(got >> 16 & 255)) +
+                    abs((int)(want >> 8 & 255) - (int)(got >> 8 & 255)) +
+                    abs((int)(want & 255) - (int)(got & 255));
+            present += d <= 24;
+        }
+    if (!letters || present * 100 < letters * 90) return false;
+    for (int y = 0; y < s_credit_h; y++)
+        for (int x = 0; x < s_credit_w; x++) {
+            const size_t i = (size_t)y * s_credit_w + x;
+            const bool old = ((s_credit_reference[i] ^ s_credit_behind[i]) & 0xFFFFFFu) != 0;
+            if (s_credit[i] >> 24)
+                put(frame, width, x0 + x, y0 + y, scale_colour(s_credit[i], k));
+            else if (old)
+                put(frame, width, x0 + x, y0 + y, scale_colour(s_credit_behind[i], k));
         }
     return true;
 }
