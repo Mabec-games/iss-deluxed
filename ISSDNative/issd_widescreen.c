@@ -993,6 +993,7 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
   PpuSetWidescreenLayerClamp(ppu,0);
   PpuSetWidescreenLayerRepeat(ppu,0);
   for (int l=0;l<4;l++) PpuSetWidescreenLayerClampBand(ppu,l,0,0);
+  PpuSetWidescreenMarginTiles(ppu,-1,0,0);
   /* Classic 4:3 takes none of the presentation branches: no VRAM/OAM
    * transaction, no supplemental sprites, no reconstructed margins. */
   if (!extra) {
@@ -1063,6 +1064,11 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
   PpuSetWidescreenLayerMask(ppu, 3);
   PpuSetWidescreenWindowExpansion(ppu, 3, 3);
   PpuSetWidescreenLayerClamp(ppu, 4);
+  /* Rain and snow are BG3 tiles $1F0-$1F9 scattered over the same map as
+   * the HUD (whose own tiles sit just either side, $1EA-$1ED, $1FA-$1FD).
+   * Let BG3 into the margins for those tiles only: the 32-column map wraps,
+   * so the weather continues across the whole screen, the HUD stays put. */
+  PpuSetWidescreenMarginTiles(ppu, 2, 0x1f0, 0x1f9);
   /* Reconstruct against the WRAM generation that produced the native OAM and
    * the currently latched scroll registers, not this frame's fresh one. */
   const uint8_t *rec = frame.ram;

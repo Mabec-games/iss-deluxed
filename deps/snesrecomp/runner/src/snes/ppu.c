@@ -204,6 +204,7 @@ bool PpuSetOverlayOamRange(Ppu *ppu, uint8_t first, uint8_t count) {
 
 static inline void PpuResetLayerPolicies(Ppu *ppu) {
   ppu->wsLayerClamp = 0;
+  ppu->wsMarginTileLayer = 0;
   ppu->wsLayerMirror = 0;
   ppu->wsLayerRepeat = 0;
   memset(ppu->wsClampY0, 0, sizeof(ppu->wsClampY0));
@@ -365,6 +366,13 @@ const uint8_t *PpuGetMode2Bg1Palette(const Ppu *ppu) {
 
 void PpuSetWidescreenLayerClamp(Ppu *ppu, uint8_t mask) {
   ppu->wsLayerClamp = mask;
+}
+
+void PpuSetWidescreenMarginTiles(Ppu *ppu, int layer, uint16_t min,
+                                 uint16_t max) {
+  ppu->wsMarginTileLayer = layer >= 0 && layer < 4 ? (uint8_t)(layer + 1) : 0;
+  ppu->wsMarginTileMin = min;
+  ppu->wsMarginTileMax = max;
 }
 
 void PpuSetWidescreenWindowExpansion(Ppu *ppu, uint8_t layer_mask,
@@ -1291,6 +1299,13 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
   } else {
     PpuApplyMarginGap(ppu, layer, &win, ws_bias);
   }
+  // Margin tile filter: spans outside the authentic 256 columns draw only
+  // the selected tiles, so the rest of the map (a HUD) stays in the middle.
+  const bool margin_filter = ppu->wsMarginTileLayer == layer + 1;
+  if (margin_filter) {
+    PpuWindowsSplit(&win, ws_bias, 0);
+    PpuWindowsSplit(&win, ws_bias, 256);
+  }
   y += ppu->vScroll[layer];
   int sc_offs = PPU_bgTilemapAdr(ppu, layer) + (((y >> 3) & 0x1f) << 5);
   if ((y & 0x100) && PPU_bgTilemapHigher(ppu, layer))
@@ -1306,6 +1321,10 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
   for (size_t windex = 0; windex < win.nr; windex++) {
     if (win.bits & (1 << windex))
       continue;  // layer is disabled for this window part
+    const bool filter = margin_filter &&
+        (win.edges[windex] < 0 || win.edges[windex] >= 256);
+#define TILE_SHOWN(tile) (!filter || ((tile) & 0x3ff) >= ppu->wsMarginTileMin && \
+                                     ((tile) & 0x3ff) <= ppu->wsMarginTileMax)
     uint x = win.edges[windex] + ppu->hScroll[layer] + ws_bias[windex];
     uint w = win.edges[windex + 1] - win.edges[windex];
     PpuZbufType *dstz = dstbuf->data + win.edges[windex] + kPpuExtraLeftRight;
@@ -1322,7 +1341,7 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
       NEXT_TP();
       int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
       PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+      uint32 bits = TILE_SHOWN(tile) ? READ_BITS(ta, tile & 0x3ff) : 0;
       if (bits) {
         z += ((tile & 0x1c00) >> kPaletteShift);
         if (tile & 0x4000) {
@@ -1342,7 +1361,7 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
       NEXT_TP();
       int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
       PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+      uint32 bits = TILE_SHOWN(tile) ? READ_BITS(ta, tile & 0x3ff) : 0;
       if (bits) {
         z += ((tile & 0x1c00) >> kPaletteShift);
         if (tile & 0x4000) {
@@ -1360,7 +1379,7 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
       uint32 tile = *tp;
       int ta = (tile & 0x8000) ? tileadr1 : tileadr0;
       PpuZbufType z = (tile & 0x2000) ? zhi : zlo;
-      uint32 bits = READ_BITS(ta, tile & 0x3ff);
+      uint32 bits = TILE_SHOWN(tile) ? READ_BITS(ta, tile & 0x3ff) : 0;
       if (bits) {
         z += ((tile & 0x1c00) >> kPaletteShift);
         if (tile & 0x4000) {
@@ -1372,6 +1391,7 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
     }
   }
 #undef NEXT_TP
+#undef TILE_SHOWN
 #undef READ_BITS
 #undef DO_PIXEL
 #undef DO_PIXEL_HFLIP
