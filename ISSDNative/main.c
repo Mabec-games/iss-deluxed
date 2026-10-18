@@ -25,6 +25,9 @@
 #include "issd_config.h"
 #include "issd_video.h"
 #include "issd_title_logo.h"
+#ifdef SNESRECOMP_NET
+#include "snes_netplay.h"
+#endif
 #include "issd_camera_render.h"
 #include "issd_readability.h"
 #include "issd_visual.h"
@@ -1159,6 +1162,14 @@ static bool PromptForRomFile(char *out, size_t out_size) {
 
 static SDL_Window *g_window = NULL;
 static SDL_Renderer *g_renderer = NULL;
+#ifdef SNESRECOMP_NET
+/* --netplay host|guest: two-player lockstep over LAN UDP. The host is player
+ * 1 and the guest player 2; each sends only its own buttons. */
+static int g_net_mode;                      /* 0 off, 1 host, 2 guest */
+static const char *g_net_bind, *g_net_peer;
+static int g_net_delay = 2;
+static FILE *g_net_hash_log;                /* --net-hash-log: WRAM hash per tick */
+#endif
 /* --fit-output WxH: the output size Fit assumes when there is no renderer. */
 static int g_fit_output_w = 0, g_fit_output_h = 0;
 static void CalculateViewport(int win_w, int win_h, IssdAspectRatio aspect, int render_w, int render_h, SDL_Rect *out_rect);
@@ -2065,6 +2076,21 @@ int main(int argc, char **argv) {
             g_target_frames = atoi(argv[++i]);
         } else if (strcmp(argv[i], "--screenshot") == 0 && i + 1 < argc) {
             g_screenshot_path = argv[++i];
+#ifdef SNESRECOMP_NET
+        } else if (strcmp(argv[i], "--netplay") == 0 && i + 1 < argc) {
+            i++;
+            g_net_mode = !strcmp(argv[i], "host") ? 1 : !strcmp(argv[i], "guest") ? 2 : 0;
+            if (!g_net_mode) Die("--netplay expects host or guest");
+        } else if (strcmp(argv[i], "--net-bind") == 0 && i + 1 < argc) {
+            g_net_bind = argv[++i];
+        } else if (strcmp(argv[i], "--net-peer") == 0 && i + 1 < argc) {
+            g_net_peer = argv[++i];
+        } else if (strcmp(argv[i], "--net-delay") == 0 && i + 1 < argc) {
+            g_net_delay = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--net-hash-log") == 0 && i + 1 < argc) {
+            g_net_hash_log = fopen(argv[++i], "w");
+            if (!g_net_hash_log) Die("Cannot open --net-hash-log file");
+#endif
         } else if (strcmp(argv[i], "--fit-output") == 0 && i + 1 < argc) {
             if (sscanf(argv[++i], "%dx%d", &g_fit_output_w, &g_fit_output_h) != 2)
                 g_fit_output_w = g_fit_output_h = 0;
@@ -2419,6 +2445,26 @@ int main(int argc, char **argv) {
 
     uint64_t perf_freq = SDL_GetPerformanceFrequency();
     uint64_t sim_interval = perf_freq / 60;
+#ifdef SNESRECOMP_NET
+    if (g_net_mode) {
+        SnesNetplayConfig net;
+        snes_netplay_config_defaults(&net);
+        net.enabled = 1;
+        net.local_slot = g_net_mode == 1 ? 0 : 1;
+        net.input_player = 0;               /* sample this machine's player-1 pad */
+        net.input_delay = g_net_delay;
+        net.transport = 2;                  /* LAN UDP */
+        snprintf(net.bind_hostport, sizeof net.bind_hostport, "%s",
+                 g_net_bind ? g_net_bind : g_net_mode == 1 ? "0.0.0.0:7777" : "0.0.0.0:7778");
+        snprintf(net.peer_hostport, sizeof net.peer_hostport, "%s",
+                 g_net_peer ? g_net_peer : g_net_mode == 1 ? "127.0.0.1:7778" : "127.0.0.1:7777");
+        snes_netplay_apply_env(&net);
+        if (snes_netplay_start(&net) != 0) Die("Netplay failed to start");
+        printf("[Netplay] %s (player %d) bound %s, peer %s, delay %d\n",
+               g_net_mode == 1 ? "Hosting" : "Joined", g_net_mode,
+               net.bind_hostport, net.peer_hostport, net.input_delay);
+    }
+#endif
     uint64_t next_sim_time = SDL_GetPerformanceCounter();
     uint64_t next_render_time = next_sim_time;
     uint64_t last_present_time = next_sim_time;
@@ -2578,6 +2624,18 @@ int main(int argc, char **argv) {
                 frame_simulated = true;
             } else {
                 if (!g_headless) g_pad1_state = IssdKeyboardRead();
+#ifdef SNESRECOMP_NET
+                /* Lockstep: only run a frame once both players' buttons for it
+                 * have arrived; otherwise keep presenting the last frame. */
+                if (g_net_mode) {
+                    uint16_t local = issd_input_read(0, g_overlay_menu.control_schema);
+                    if (g_input_focused || g_headless) local |= g_pad1_state | issd_touch_pad_mask();
+                    if (issd_script_active() && (issd_script_players() & 1u))
+                        local = (uint16_t)issd_script_mask_player(frame_count, 0);
+                    snes_netplay_stage_local(local & 0xfff);
+                    if (!snes_netplay_poll_admit()) goto net_frame_stalled;
+                }
+#endif
                 /* Clear frame buffer & set PPU draw buffer */
                 memset(g_pixel_buffer, 0, (size_t)cur_render_w * cur_render_h * sizeof(uint32_t));
                 PpuBeginDrawing(g_snes->ppu, (uint8_t *)g_pixel_buffer, (size_t)cur_render_w * sizeof(uint32_t),
@@ -2668,7 +2726,27 @@ int main(int argc, char **argv) {
                 uint64_t _rf_t0 = SDL_GetPerformanceCounter();
                 g_frame_healthy = false;
                 issd_stadium_trace_set_frame(frame_count);
+#ifdef SNESRECOMP_NET
+                if (g_net_mode) {               /* both players' admitted buttons */
+                    const uint32_t both = snes_netplay_published_inputs();
+                    memset(pads, 0, sizeof pads);
+                    pads[0] = both & 0xfff;
+                    pads[1] = (both >> 12) & 0xfff;
+                    connected = 3;
+                }
+#endif
                 RtlRunFrameControllers(pads, connected, true);
+#ifdef SNESRECOMP_NET
+                if (g_net_mode) {
+                    if (g_net_hash_log) {       /* FNV-1a of WRAM, to prove both peers agree */
+                        uint32_t h = 2166136261u;
+                        for (size_t b = 0; b < 0x20000; b++) h = (h ^ g_ram[b]) * 16777619u;
+                        fprintf(g_net_hash_log, "%u %08x %03x %03x\n", snes_netplay_sim_tick(), h,
+                                pads[0], pads[1]);
+                    }
+                    snes_netplay_finish_frame();
+                }
+#endif
                 uint64_t _rf_t1 = SDL_GetPerformanceCounter();
                 double _rf_sec = (double)(_rf_t1 - _rf_t0) / perf_freq;
                 if (_rf_sec > 0.05) {
@@ -2807,6 +2885,9 @@ int main(int argc, char **argv) {
                     }
                     fflush(stdout);
                 }
+#ifdef SNESRECOMP_NET
+net_frame_stalled:;
+#endif
             }
 
             if (!g_headless) issd_menu_tick_notification();
