@@ -87,9 +87,12 @@ if(ISSD_NETPLAY)
     target_compile_definitions(ISSDNative PRIVATE SNESRECOMP_NET=1 SNES_HAS_LOBBY_CLIENT=1)
     # Online players must run the same build: the lobby matches this exactly.
     file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" ISSD_VERSION LIMIT_COUNT 1)
-    execute_process(COMMAND git rev-parse --short HEAD
-        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-        OUTPUT_VARIABLE ISSD_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    # Builds without git (the Debian 12 AppImage root) pass -DISSD_GIT_HASH.
+    if(NOT ISSD_GIT_HASH)
+        execute_process(COMMAND git rev-parse --short HEAD
+            WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+            OUTPUT_VARIABLE ISSD_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    endif()
     target_compile_definitions(ISSDNative PRIVATE
         ISSD_ONLINE_VERSION="${ISSD_VERSION}-${ISSD_GIT_HASH}")
 endif()
