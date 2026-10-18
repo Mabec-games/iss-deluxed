@@ -1,6 +1,20 @@
+<p align="center"><img src="assets/launcher/logo.png" alt="MABECS International Superstar Soccer DELUXE'd" width="820"></p>
+
 # ISS DELUXE'd
 
-> **Fork notice:** ISS DELUXE'd is a non-commercial community fork of [ISSD Native](https://github.com/sergiomanzur/issd-native) by sergiomanzur. It is developed and tested on **Linux only**. See [Fork licensing](#fork-licensing) for what you may and may not do with it.
+> **Fork notice:** ISS DELUXE'd is a non-commercial community fork of [ISSD Native](https://github.com/sergiomanzur/issd-native) by sergiomanzur. It is developed and tested on **Linux only**.
+
+**[Download the Linux AppImage (beta)](https://github.com/Mabec-games/iss-deluxed/releases)**: you supply your own International Superstar Soccer Deluxe (USA) ROM.
+
+## What ISS DELUXE'd adds
+
+- **Online play:** HOST shows an invite code (such as `EU-TIGER-482913`), JOIN with that code. Peer to peer, no account, no login, nobody sees or types an IP address.
+- **True pixel-perfect widescreen:** *Fit Pixel Perfect* picks the widest sharp widescreen view for your screen (full width at 1080p). Corner fences and announcement banners fixed in widescreen.
+- **Launcher:** ROM selection (only the exact USA ROM is accepted), options and controls before the game starts. No in-game menu needed.
+- **New MABECS title logo** that flies in like the original.
+- **Enhanced animation** for running and walking, applied to every player.
+- **Linux AppImage** for Debian 12+, Ubuntu 22.04+, Fedora 35+ and similar.
+
 
 A native recompilation and modernization of **International Superstar Soccer Deluxe (USA)** for the Super Nintendo. The original 65816 code is translated into C, with native replacements for asset decompression, memory streaming, and audio command handling. The runner retains SNES hardware models for video, audio, and other peripherals.
 
