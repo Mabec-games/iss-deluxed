@@ -106,6 +106,7 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->true_widescreen = true;
     cfg->widescreen_menus = true;
     cfg->enhanced_running_animation = true;
+    cfg->ball_shadow = true;
     cfg->crt_strength = 100;
     cfg->radar_scale = 1;
     cfg->hud_scale = 1;

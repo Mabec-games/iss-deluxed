@@ -14,7 +14,7 @@ int main(int argc, char **argv) {
     assert(cfg.camera_mode == ISSD_CAMERA_CLASSIC);
     cfg.camera_mode = ISSD_CAMERA_TACTICAL_WIDE;
     assert(!cfg.integer_scaling && cfg.output_resolution == 0 && cfg.overlay_scale == 0);
-    assert(!cfg.ball_outline && !cfg.ball_shadow && !cfg.player_markers && !cfg.player_names);
+    assert(!cfg.ball_outline && cfg.ball_shadow && !cfg.player_markers && !cfg.player_names);
     assert(cfg.enhanced_running_animation && cfg.aspect_ratio == ISSD_ASPECT_FIT);
     assert(cfg.scaling_filter == ISSD_FILTER_NEAREST);
     assert(cfg.widescreen_menus && !strcmp(cfg.hd_texture_packs, "title_screen_hd"));
@@ -171,7 +171,7 @@ int main(int argc, char **argv) {
     assert(loaded.master_volume == 55 && loaded.key_p1_a == 30);
     assert(loaded.scaling_filter == ISSD_FILTER_CRT && loaded.integer_scaling);
     assert(loaded.output_resolution == 0 && loaded.overlay_scale == 0 && loaded.radar_scale == 1);
-    assert(!loaded.ball_outline && !loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
+    assert(!loaded.ball_outline && loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
     assert(loaded.enhanced_running_animation);
     /* Malformed new settings do not overwrite defaults; old filter values
      * remain stable across a fresh load and save. */
@@ -184,7 +184,7 @@ int main(int argc, char **argv) {
     fclose(f);
     assert(issd_config_load(&loaded, argv[1]));
     assert(loaded.output_resolution == 0 && loaded.overlay_scale == 0 && loaded.radar_scale == 1);
-    assert(!loaded.ball_outline && !loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
+    assert(!loaded.ball_outline && loaded.ball_shadow && !loaded.player_markers && !loaded.player_names);
     assert(loaded.scaling_filter == ISSD_FILTER_NEAREST && loaded.internal_res == ISSD_RES_8X_4K);
     assert(loaded.aspect_ratio == ISSD_ASPECT_4_3);
     assert(loaded.enhanced_running_animation);
