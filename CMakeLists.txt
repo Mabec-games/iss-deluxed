@@ -142,6 +142,8 @@ if(WIN32)
     # cross-platform snesrecomp_pick_rom_file covers every platform), but winmm
     # and ws2_32 remain runner dependencies on Windows.
     target_link_libraries(ISSDNative PRIVATE winmm ws2_32)
+    # Exe icon (the golden ball).
+    target_sources(ISSDNative PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative/issd_windows.rc")
 
     # runner.cmake copies SDL2.dll itself when SDL2 is found as an imported
     # shared target. This covers the plain SDL2_LIBRARIES case, where there is

@@ -1,0 +1,3 @@
+// Windows exe icon: the golden ball (tools/build_windows_icon.ps1). Being
+// the first icon resource, Explorer, the taskbar and SDL's window all use it.
+1 ICON "../assets/launcher/icon.ico"
