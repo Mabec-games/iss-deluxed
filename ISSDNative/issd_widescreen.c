@@ -1019,6 +1019,9 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
       fill_coin_crowd(ppu);
       PpuSetWidescreenLayerMask(ppu, 1);
       PpuSetWidescreenLayerClamp(ppu, 0x1e);
+      /* Snow and rain fall over the whole stadium here, on BG3 tiles
+       * $1F0-$1F9 with no HUD on that layer: let them into the margins. */
+      PpuSetWidescreenMarginTiles(ppu, 2, 0x1f0, 0x1f9);
     } else if (issd_widescreen_stats_layout(ppu, ram)) {
       PpuSetExtraSpace(ppu, (uint16_t)extra);
       PpuSetExtraSideSpace(ppu, extra, extra, 0);
