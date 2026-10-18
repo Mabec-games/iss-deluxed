@@ -4,6 +4,7 @@
  * row, so it can be driven entirely by a controller. */
 #include "issd_launcher.h"
 
+#include <ctype.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -150,7 +151,8 @@ static const char *file_name(const char *path) {
 
 /* ---- menu ---------------------------------------------------------------- */
 
-typedef enum { PAGE_WELCOME, PAGE_MAIN, PAGE_ONLINE, PAGE_OPTIONS, PAGE_CONTROLS } Page;
+typedef enum { PAGE_WELCOME, PAGE_MAIN, PAGE_ONLINE, PAGE_OPTIONS, PAGE_CONTROLS, PAGE_HOST, PAGE_JOIN } Page;
+enum { ONLINE_HOST, ONLINE_JOIN, ONLINE_BACK, ONLINE_COUNT };
 enum { WELCOME_ROM, WELCOME_QUIT, WELCOME_COUNT };
 enum { MAIN_PLAY, MAIN_ONLINE, MAIN_OPTIONS, MAIN_CONTROLS, MAIN_QUIT, MAIN_COUNT };
 enum { OPT_FULLSCREEN, OPT_WINDOW, OPT_VOLUME, OPT_BALL_SHADOW, OPT_ROM, OPT_BACK, OPT_COUNT };
@@ -165,13 +167,16 @@ typedef struct {
     size_t rom_path_size;
     IssdConfig *cfg;
     bool play, running;
+    IssdLaunchChoice choice;
+    IssdOnlineLaunch *online;
+    char code[32];                /* invite code being typed on the join page */
     SDL_FRect items[8];
     int item_count;
 } Launcher;
 
 static int page_count(const Launcher *l) {
     return l->page == PAGE_MAIN ? MAIN_COUNT : l->page == PAGE_OPTIONS ? OPT_COUNT :
-           l->page == PAGE_WELCOME ? WELCOME_COUNT : 1;
+           l->page == PAGE_WELCOME ? WELCOME_COUNT : l->page == PAGE_ONLINE ? ONLINE_COUNT : 1;
 }
 
 static void use_rom(Launcher *l, const char *chosen) {
@@ -194,7 +199,18 @@ static void pick_rom(Launcher *l) {
     if (snesrecomp_pick_rom_file(path, sizeof path) && path[0]) use_rom(l, path);
 }
 
-static void open_page(Launcher *l, Page page, int focus) { l->page = page; l->focus = focus; }
+static void open_page(Launcher *l, Page page, int focus) {
+    if (l->page == PAGE_JOIN && page != PAGE_JOIN) SDL_StopTextInput();
+    if (page == PAGE_JOIN && l->page != PAGE_JOIN) { SDL_StartTextInput(); l->code[0] = '\0'; }
+    l->page = page;
+    l->focus = focus;
+}
+
+/* Leaving the host or join page gives up the room. */
+static void leave_online(Launcher *l) {
+    issd_online_cancel();
+    open_page(l, PAGE_ONLINE, l->page == PAGE_JOIN ? ONLINE_JOIN : ONLINE_HOST);
+}
 
 static void change_option(Launcher *l, int item, int dir) {
     IssdConfig *cfg = l->cfg;
@@ -220,10 +236,10 @@ static void activate(Launcher *l) {
     case PAGE_MAIN:
         switch (l->focus) {
         case MAIN_PLAY:
-            if (l->rom_ok) { l->play = true; l->running = false; }
+            if (l->rom_ok) { l->play = true; l->choice = ISSD_LAUNCH_PLAY; l->running = false; }
             else pick_rom(l);
             break;
-        case MAIN_ONLINE: open_page(l, PAGE_ONLINE, 0); break;
+        case MAIN_ONLINE: if (l->rom_ok) open_page(l, PAGE_ONLINE, 0); else pick_rom(l); break;
         case MAIN_OPTIONS: open_page(l, PAGE_OPTIONS, 0); break;
         case MAIN_CONTROLS: open_page(l, PAGE_CONTROLS, 0); break;
         case MAIN_QUIT: l->running = false; break;
@@ -234,13 +250,25 @@ static void activate(Launcher *l) {
         else if (l->focus == OPT_BACK) open_page(l, PAGE_MAIN, MAIN_OPTIONS);
         else change_option(l, l->focus, 1);
         break;
-    case PAGE_ONLINE: open_page(l, PAGE_MAIN, MAIN_ONLINE); break;
+    case PAGE_ONLINE:
+        if (l->focus == ONLINE_HOST) { open_page(l, PAGE_HOST, 0); issd_online_host(); }
+        else if (l->focus == ONLINE_JOIN) open_page(l, PAGE_JOIN, 0);
+        else open_page(l, PAGE_MAIN, MAIN_ONLINE);
+        break;
+    case PAGE_HOST: leave_online(l); break;
+    case PAGE_JOIN: {
+        IssdOnlineState state = issd_online_poll();
+        if (state == ISSD_ONLINE_IDLE || state == ISSD_ONLINE_FAILED) issd_online_join(l->code);
+        else leave_online(l);
+        break;
+    }
     case PAGE_CONTROLS: open_page(l, PAGE_MAIN, MAIN_CONTROLS); break;
     }
 }
 
 static void back(Launcher *l) {
     if (l->page == PAGE_MAIN || l->page == PAGE_WELCOME) l->running = false;
+    else if (l->page == PAGE_HOST || l->page == PAGE_JOIN) leave_online(l);
     else open_page(l, PAGE_MAIN, l->page == PAGE_OPTIONS ? MAIN_OPTIONS :
                                  l->page == PAGE_ONLINE ? MAIN_ONLINE : MAIN_CONTROLS);
 }
@@ -273,11 +301,12 @@ static void option_label(const IssdConfig *cfg, int item, char *out, size_t size
 
 /* ---- main loop ------------------------------------------------------------- */
 
-bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
+IssdLaunchChoice issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size,
+                                   IssdOnlineLaunch *online) {
     if (SDL_InitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS) != 0) {
         fprintf(stderr, "[Launcher] SDL init failed: %s\n", SDL_GetError());
         char why[160];
-        return issd_launcher_rom_ok(rom_path, why, sizeof why);
+        return issd_launcher_rom_ok(rom_path, why, sizeof why) ? ISSD_LAUNCH_PLAY : ISSD_LAUNCH_QUIT;
     }
     SDL_EventState(SDL_DROPFILE, SDL_ENABLE);
     Uint32 flags = SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI |
@@ -292,7 +321,7 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
         if (window) SDL_DestroyWindow(window);
         SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS);
         char why[160];
-        return issd_launcher_rom_ok(rom_path, why, sizeof why);
+        return issd_launcher_rom_ok(rom_path, why, sizeof why) ? ISSD_LAUNCH_PLAY : ISSD_LAUNCH_QUIT;
     }
     SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
@@ -306,6 +335,7 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
     l.rom_path = rom_path;
     l.rom_path_size = rom_path_size;
     l.running = true;
+    l.online = online;
     l.page = PAGE_MAIN;
     if (rom_path[0]) use_rom(&l, rom_path);
     if (!l.rom_ok) {
@@ -350,7 +380,26 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
                     }
                 } else if (e.button.button == SDL_BUTTON_RIGHT) back(&l);
                 break;
+            case SDL_TEXTINPUT:
+                if (l.page == PAGE_JOIN && strlen(l.code) + strlen(e.text.text) < 24) {
+                    for (const char *c = e.text.text; *c; c++) {
+                        size_t n = strlen(l.code);
+                        if ((isalnum((unsigned char)*c) || *c == '-') && n + 1 < 24) {
+                            l.code[n] = (char)toupper((unsigned char)*c);
+                            l.code[n + 1] = '\0';
+                        }
+                    }
+                }
+                break;
             case SDL_KEYDOWN:
+                if (l.page == PAGE_JOIN && e.key.keysym.sym == SDLK_BACKSPACE) {
+                    size_t n = strlen(l.code);
+                    if (n) l.code[n - 1] = '\0';
+                    break;
+                }
+                if (l.page == PAGE_JOIN && (e.key.keysym.sym == SDLK_w || e.key.keysym.sym == SDLK_s ||
+                                            e.key.keysym.sym == SDLK_a || e.key.keysym.sym == SDLK_d ||
+                                            e.key.keysym.sym == SDLK_SPACE)) break;   /* letters of the code */
                 switch (e.key.keysym.sym) {
                 case SDLK_UP: case SDLK_w: move(&l, -1); break;
                 case SDLK_DOWN: case SDLK_s: case SDLK_TAB: move(&l, 1); break;
@@ -386,6 +435,12 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
             }
         }
         if (!l.running) break;
+        if ((l.page == PAGE_HOST || l.page == PAGE_JOIN) && issd_online_poll() == ISSD_ONLINE_LAUNCH &&
+            issd_online_take_launch(l.online)) {
+            l.choice = ISSD_LAUNCH_ONLINE;
+            l.running = false;
+            break;
+        }
         /* Fullscreen follows the option immediately, so it can be judged here. */
         bool is_full = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN_DESKTOP) == SDL_WINDOW_FULLSCREEN_DESKTOP;
         if (is_full != cfg->fullscreen) SDL_SetWindowFullscreen(window, cfg->fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
@@ -418,14 +473,18 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
             draw_text_centered(renderer, &small, "ROM file. You can also drop the file onto this window.",
                                vw / 2, top + 66, plain);
         }
-        if (l.page == PAGE_MAIN || l.page == PAGE_OPTIONS || l.page == PAGE_WELCOME) {
-            const Font *font = l.page == PAGE_OPTIONS ? &normal : &big;
+        if (l.page == PAGE_MAIN || l.page == PAGE_OPTIONS || l.page == PAGE_WELCOME || l.page == PAGE_ONLINE) {
+            const Font *font = l.page == PAGE_OPTIONS || l.page == PAGE_ONLINE ? &normal : &big;
             const float first = l.page == PAGE_WELCOME ? top + 112 : top;
             int n = page_count(&l);
             for (int i = 0; i < n; i++) {
                 char label[64];
                 if (l.page == PAGE_MAIN) snprintf(label, sizeof label, "%s", main_label(i, l.rom_ok));
                 else if (l.page == PAGE_WELCOME) snprintf(label, sizeof label, "%s", i == WELCOME_ROM ? "SELECT ROM" : "QUIT");
+                else if (l.page == PAGE_ONLINE) {
+                    static const char *online_labels[] = { "HOST GAME", "JOIN GAME", "BACK" };
+                    snprintf(label, sizeof label, "%s", online_labels[i]);
+                }
                 else option_label(cfg, i, label, sizeof label);
                 float y = first + i * row;
                 float w = text_width(font, label);
@@ -441,12 +500,40 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
             }
             if (l.page == PAGE_OPTIONS)
                 draw_text_centered(renderer, &small, "Left / Right to change", vw / 2, top + n * row + 4, dim);
-        } else if (l.page == PAGE_ONLINE) {
-            draw_text_centered(renderer, &big, "ONLINE", vw / 2, top, gold);
-            draw_text_centered(renderer, &normal, "Coming soon: host a match and share an invite", vw / 2, top + 70, plain);
-            draw_text_centered(renderer, &normal, "code, or join a friend's match with theirs.", vw / 2, top + 106, plain);
-            draw_text_centered(renderer, &small, "Press A / Enter to go back", vw / 2, top + 170, dim);
-            l.items[l.item_count++] = (SDL_FRect){ (vw - panel_w) / 2, top, panel_w, 200 };
+            if (l.page == PAGE_ONLINE)
+                draw_text_centered(renderer, &small, "Host and send your invite code, or join with your friend's code.",
+                                   vw / 2, top + n * row + 4, dim);
+        } else if (l.page == PAGE_HOST || l.page == PAGE_JOIN) {
+            IssdOnlineState state = issd_online_poll();
+            bool busy = state != ISSD_ONLINE_IDLE && state != ISSD_ONLINE_FAILED;
+            if (l.page == PAGE_HOST) {
+                draw_text_centered(renderer, &normal, "YOUR INVITE CODE", vw / 2, top - 4, dim);
+                draw_text_centered(renderer, &big, issd_online_code()[0] ? issd_online_code() : "...",
+                                   vw / 2, top + 34, gold);
+                draw_text_centered(renderer, &small, "Send this code to your opponent.", vw / 2, top + 96, plain);
+            } else {
+                char shown[40];
+                bool caret = (SDL_GetTicks() / 500) % 2 && !busy;
+                snprintf(shown, sizeof shown, "%s%s", l.code, caret ? "_" : " ");
+                draw_text_centered(renderer, &normal, "TYPE THE INVITE CODE", vw / 2, top - 4, dim);
+                fill_rect(renderer, (SDL_FRect){ vw / 2 - 260, top + 30, 520, 56 }, (SDL_Color){ 20, 26, 44, 230 });
+                draw_text_centered(renderer, &big, shown, vw / 2, top + 36, gold);
+            }
+            draw_text_centered(renderer, &small, issd_online_message(), vw / 2, top + 132,
+                               state == ISSD_ONLINE_FAILED ? (SDL_Color){ 255, 120, 110, 255 } : plain);
+            const char *action = l.page == PAGE_HOST ? (busy ? "CANCEL" : "BACK")
+                                                     : (busy ? "CANCEL" : "JOIN");
+            float y = top + 176;
+            float w = text_width(&normal, action);
+            l.items[l.item_count++] = (SDL_FRect){ (vw - panel_w) / 2, y - 6, panel_w, 46 };
+            draw_text_centered(renderer, &normal, action, vw / 2, y, gold);
+            if (ball) {
+                float size = normal.size * 1.05f, bob = sinf(t * 5.0f) * 3.0f;
+                SDL_FRect b = { vw / 2 - w / 2 - size - 18 + bob, y + (normal.size - size) / 2 + 2, size, size };
+                SDL_RenderCopyF(renderer, ball, NULL, &b);
+            }
+            if (l.page == PAGE_JOIN && !busy)
+                draw_text_centered(renderer, &small, "Esc to go back", vw / 2, y + 50, dim);
         } else {
             static const char *keys[][2] = {
                 { "Move", "Arrows / WASD" }, { "Short pass (B)", "Z / J" }, { "Shoot (A)", "X / K" },
@@ -477,6 +564,8 @@ bool issd_launcher_run(IssdConfig *cfg, char *rom_path, size_t rom_path_size) {
     if (ball) SDL_DestroyTexture(ball);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
+    if (l.page == PAGE_JOIN) SDL_StopTextInput();
+    if (l.choice != ISSD_LAUNCH_ONLINE) issd_online_cancel();
     SDL_QuitSubSystem(SDL_INIT_VIDEO | SDL_INIT_GAMECONTROLLER | SDL_INIT_EVENTS);
-    return l.play;
+    return l.choice;
 }

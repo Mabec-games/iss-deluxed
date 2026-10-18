@@ -53,6 +53,7 @@ add_custom_command(
     VERBATIM)
 target_sources(ISSDNative PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative/issd_launcher.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative/issd_online.c"     # needs ISSD_NETPLAY
     ${ISSD_LAUNCHER_ASSETS_H})
 target_include_directories(ISSDNative PRIVATE
     "${CMAKE_BINARY_DIR}/gen"
@@ -69,7 +70,28 @@ endif()
 # Delay-sync two-player netplay (recomp-net, LAN transport for now).
 option(ISSD_NETPLAY "Build two-player netplay" ON)
 if(ISSD_NETPLAY)
-    snesrecomp_enable_recomp_net(ISSDNative)
+    # Internet play: peer-to-peer ICE (libjuice, built in statically). The
+    # engine's netplay core is used as is, but its lobby client (which now
+    # requires a Discord login) is replaced by issd_signal.c, which meets
+    # through public MQTT brokers with the invite code as the key.
+    set(SNESRECOMP_NET_ICE ON CACHE BOOL "ICE transport for online play" FORCE)
+    _snesrecomp_add_recomp_net()
+    target_link_libraries(ISSDNative PRIVATE recomp_net)
+    target_sources(ISSDNative PRIVATE
+        "${SNESRECOMP_RUNNER_ROOT}/src/netplay/snes_netplay.c"
+        "${SNESRECOMP_RUNNER_ROOT}/src/netplay/snes_host_session.c"
+        "${CMAKE_CURRENT_SOURCE_DIR}/ISSDNative/issd_signal.c")
+    target_include_directories(ISSDNative PRIVATE
+        "${SNESRECOMP_RUNNER_ROOT}/src/netplay"
+        "${SNESRECOMP_RUNNER_ROOT}/src/lobby")
+    target_compile_definitions(ISSDNative PRIVATE SNESRECOMP_NET=1 SNES_HAS_LOBBY_CLIENT=1)
+    # Online players must run the same build: the lobby matches this exactly.
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/VERSION" ISSD_VERSION LIMIT_COUNT 1)
+    execute_process(COMMAND git rev-parse --short HEAD
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        OUTPUT_VARIABLE ISSD_GIT_HASH OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET)
+    target_compile_definitions(ISSDNative PRIVATE
+        ISSD_ONLINE_VERSION="${ISSD_VERSION}-${ISSD_GIT_HASH}")
 endif()
 
 target_include_directories(ISSDNative PRIVATE

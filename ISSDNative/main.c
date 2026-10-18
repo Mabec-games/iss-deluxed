@@ -30,6 +30,7 @@
 #endif
 #ifdef SNESRECOMP_NET
 #include "snes_netplay.h"
+#include "issd_online.h"
 #endif
 #include "issd_camera_render.h"
 #include "issd_readability.h"
@@ -1171,6 +1172,13 @@ static SDL_Renderer *g_renderer = NULL;
 static int g_net_mode;                      /* 0 off, 1 host, 2 guest */
 static const char *g_net_bind, *g_net_peer;
 static int g_net_delay = 2;
+static bool g_net_online;                   /* arranged by the launcher's lobby */
+static char g_net_bind_buf[64], g_net_peer_buf[64];
+/* --online-host / --online-join CODE: the launcher's HOST/JOIN without a
+ * window, for testing. --online-code-file receives the host's code. */
+static int g_online_cli;                    /* 0 off, 1 host, 2 join */
+static const char *g_online_join_code, *g_online_code_file;
+static IssdOnlineLaunch g_net_launch;
 static FILE *g_net_hash_log;                /* --net-hash-log: WRAM hash per tick */
 #endif
 /* --fit-output WxH: the output size Fit assumes when there is no renderer. */
@@ -2099,6 +2107,13 @@ int main(int argc, char **argv) {
             g_net_peer = argv[++i];
         } else if (strcmp(argv[i], "--net-delay") == 0 && i + 1 < argc) {
             g_net_delay = atoi(argv[++i]);
+        } else if (strcmp(argv[i], "--online-host") == 0) {
+            g_online_cli = 1;
+        } else if (strcmp(argv[i], "--online-join") == 0 && i + 1 < argc) {
+            g_online_cli = 2;
+            g_online_join_code = argv[++i];
+        } else if (strcmp(argv[i], "--online-code-file") == 0 && i + 1 < argc) {
+            g_online_code_file = argv[++i];
         } else if (strcmp(argv[i], "--net-hash-log") == 0 && i + 1 < argc) {
             g_net_hash_log = fopen(argv[++i], "w");
             if (!g_net_hash_log) Die("Cannot open --net-hash-log file");
@@ -2224,10 +2239,18 @@ int main(int argc, char **argv) {
     static char launcher_rom[ISSD_CONFIG_ROM_PATH_MAX];
     if (!g_headless && !no_launcher && !(cli_rom_path && cli_rom_path[0])) {
         snprintf(launcher_rom, sizeof launcher_rom, "%s", g_issd_config.rom_path);
-        bool play = issd_launcher_run(&g_issd_config, launcher_rom, sizeof launcher_rom);
+        IssdOnlineLaunch online;
+        IssdLaunchChoice choice = issd_launcher_run(&g_issd_config, launcher_rom, sizeof launcher_rom, &online);
         issd_config_save(&g_issd_config, NULL);
-        if (!play) return 0;
+        if (choice == ISSD_LAUNCH_QUIT) return 0;
         cli_rom_path = launcher_rom;
+#ifdef SNESRECOMP_NET
+        if (choice == ISSD_LAUNCH_ONLINE) {
+            g_net_online = true;
+            g_net_launch = online;
+            g_net_mode = online.local_slot == 0 ? 1 : 2;
+        }
+#endif
     }
 #endif
     bool picked_rom = false;
@@ -2475,6 +2498,30 @@ int main(int argc, char **argv) {
     uint64_t perf_freq = SDL_GetPerformanceFrequency();
     uint64_t sim_interval = perf_freq / 60;
 #ifdef SNESRECOMP_NET
+    if (g_online_cli) {
+        if (g_online_cli == 1) issd_online_host();
+        else issd_online_join(g_online_join_code);
+        bool code_written = false;
+        for (;;) {
+            IssdOnlineState state = issd_online_poll();
+            if (g_online_cli == 1 && !code_written && issd_online_code()[0]) {
+                printf("[Online] Invite code: %s\n", issd_online_code());
+                fflush(stdout);
+                if (g_online_code_file) {
+                    FILE *f = fopen(g_online_code_file, "w");
+                    if (f) { fprintf(f, "%s\n", issd_online_code()); fclose(f); }
+                }
+                code_written = true;
+            }
+            if (state == ISSD_ONLINE_FAILED) Die(issd_online_message());
+            if (state == ISSD_ONLINE_LAUNCH && issd_online_take_launch(&g_net_launch)) break;
+            SDL_Delay(16);
+        }
+        g_net_online = true;
+        g_net_mode = g_net_launch.local_slot == 0 ? 1 : 2;
+        printf("[Online] Match arranged: slot %d, session %u\n", g_net_launch.local_slot,
+               (unsigned)g_net_launch.session_id);
+    }
     if (g_net_mode) {
         SnesNetplayConfig net;
         snes_netplay_config_defaults(&net);
@@ -2483,6 +2530,15 @@ int main(int argc, char **argv) {
         net.input_player = 0;               /* sample this machine's player-1 pad */
         net.input_delay = g_net_delay;
         net.transport = 2;                  /* LAN UDP */
+        if (g_net_online) {                 /* internet: ICE through the lobby */
+            net.transport = 1;
+            net.session_id = g_net_launch.session_id;
+            net.input_delay = g_net_launch.input_delay;
+            snprintf(g_net_bind_buf, sizeof g_net_bind_buf, "%s", g_net_launch.bind_hostport);
+            snprintf(g_net_peer_buf, sizeof g_net_peer_buf, "%s", g_net_launch.peer_hostport);
+            g_net_bind = g_net_bind_buf;
+            g_net_peer = g_net_peer_buf;
+        }
         snprintf(net.bind_hostport, sizeof net.bind_hostport, "%s",
                  g_net_bind ? g_net_bind : g_net_mode == 1 ? "0.0.0.0:7777" : "0.0.0.0:7778");
         snprintf(net.peer_hostport, sizeof net.peer_hostport, "%s",
@@ -2657,6 +2713,12 @@ int main(int argc, char **argv) {
                 /* Lockstep: only run a frame once both players' buttons for it
                  * have arrived; otherwise keep presenting the last frame. */
                 if (g_net_mode) {
+                    static bool lobby_released;
+                    if (g_net_online && !lobby_released && snes_netplay_is_running()) {
+                        issd_online_match_connected();
+                        lobby_released = true;
+                        printf("[Netplay] Connected over %s; left the lobby.\n", snes_netplay_transport_name());
+                    }
                     uint16_t local = issd_input_read(0, g_overlay_menu.control_schema);
                     if (g_input_focused || g_headless) local |= g_pad1_state | issd_touch_pad_mask();
                     if (issd_script_active() && (issd_script_players() & 1u))
