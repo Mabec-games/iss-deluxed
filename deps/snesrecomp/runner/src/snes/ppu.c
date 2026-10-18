@@ -607,8 +607,20 @@ static void PpuWindows_CalcWithExtra(PpuWindows *win, Ppu *ppu, uint layer,
   // from classifying otherwise valid side-margin pixels as outside.
   int w1l = ppu->window1left, w1r = ppu->window1right;
   int w2l = ppu->window2left, w2r = ppu->window2right;
+  /* The color window draws banners such as ISS Deluxe's FOUL / THROW IN
+   * bar over columns 1..255: only its right edge is pinned, so widening it
+   * gave a bar reaching the far right but stopping at the original left
+   * edge. A color window widens only when it covers the whole authentic
+   * line; anything narrower is a framed element and keeps its width. */
+  const bool color_window = layer == 5;
+  const bool w1_full = w1l == 0 && w1r == kPpuXPixels - 1;
+  const bool w2_full = w2l == 0 && w2r == kPpuXPixels - 1;
   PpuWidescreenAdjustPinnedWindowEdges(win->edges[0], window_right, &w1l,
                                        &w1r, &w2l, &w2r);
+  if (color_window) {
+    if (!w1_full) { w1l = ppu->window1left; w1r = ppu->window1right; }
+    if (!w2_full) { w2l = ppu->window2left; w2r = ppu->window2right; }
+  }
   if (ppu->wsWindowExpandLayers & (1u << layer)) {
     if ((ppu->wsWindowExpandWindows & 1u) &&
         ppu->window1left <= ppu->window1right) {
