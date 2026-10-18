@@ -477,3 +477,16 @@ bool issd_config_save(const IssdConfig *cfg, const char *filepath) {
     printf("[Config] Saved configuration to '%s'.\n", path);
     return true;
 }
+
+void issd_config_apply_final_look(IssdConfig *cfg) {
+    if (!cfg) return;
+    cfg->aspect_ratio = ISSD_ASPECT_FIT;
+    cfg->true_widescreen = true;
+    cfg->widescreen_menus = true;
+    cfg->scaling_filter = ISSD_FILTER_NEAREST;
+    cfg->enhanced_running_animation = true;
+    cfg->ball_shadow = true;
+    cfg->camera_mode = ISSD_CAMERA_CLASSIC;
+    cfg->color_boost = false;
+    snprintf(cfg->hd_texture_packs, sizeof(cfg->hd_texture_packs), "%s", "title_screen_hd");
+}

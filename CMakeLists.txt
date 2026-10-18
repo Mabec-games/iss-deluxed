@@ -35,6 +35,13 @@ add_executable(ISSDNative
     ${ISSD_GAME_SOURCES}
 )
 
+# Final build: no in-game menu or hotkeys, and the remaster look applied on
+# every start. Developer builds keep the overlay for testing.
+option(ISSD_FINAL_BUILD "Build without the in-game menu" OFF)
+if(ISSD_FINAL_BUILD)
+    target_compile_definitions(ISSDNative PRIVATE ISSD_FINAL_BUILD=1)
+endif()
+
 # Delay-sync two-player netplay (recomp-net, LAN transport for now).
 option(ISSD_NETPLAY "Build two-player netplay" ON)
 if(ISSD_NETPLAY)

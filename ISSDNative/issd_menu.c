@@ -313,6 +313,9 @@ void issd_menu_init(void) {
 }
 
 void issd_menu_toggle(void) {
+#ifdef ISSD_FINAL_BUILD
+    return;                     /* no in-game menu: settings live in the launcher */
+#endif
     issd_controls_end_capture();
     if (s_reset_input) s_reset_input();
     g_overlay_menu.is_open = !g_overlay_menu.is_open;
@@ -327,6 +330,9 @@ void issd_menu_toggle(void) {
 }
 
 void issd_menu_open(void) {
+#ifdef ISSD_FINAL_BUILD
+    return;
+#endif
     issd_controls_end_capture();
     if (s_reset_input) s_reset_input();
     g_overlay_menu.is_open = true;

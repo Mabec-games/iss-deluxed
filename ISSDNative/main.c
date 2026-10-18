@@ -1742,6 +1742,13 @@ static void ProcessInputEvent(const SDL_Event *ev) {
             return;
         }
 
+#ifdef ISSD_FINAL_BUILD
+        /* No setting, save-state or speed hotkeys: they would change a match
+         * mid-play and break online sync. Fullscreen stays. */
+        if (down && code == SDL_SCANCODE_F11) { ToggleFullscreen(); return; }
+        if (code == SDL_SCANCODE_TAB || (code >= SDL_SCANCODE_F1 && code <= SDL_SCANCODE_F12) ||
+            (code >= SDL_SCANCODE_1 && code <= SDL_SCANCODE_8)) return;
+#else
         if (down) {
             if (code == SDL_SCANCODE_F2) {
                 /* Cycle Control Schema Hotkey */
@@ -1838,6 +1845,7 @@ static void ProcessInputEvent(const SDL_Event *ev) {
                 return;
             }
         }
+#endif
 
         switch (code) {
             case SDL_SCANCODE_Z:
@@ -2144,6 +2152,9 @@ int main(int argc, char **argv) {
     ResolveConfigPath(config_path, sizeof(config_path), cli_config_path);
     issd_config_set_default_path(config_path);
     issd_config_load(&g_issd_config, NULL);
+#ifdef ISSD_FINAL_BUILD
+    issd_config_apply_final_look(&g_issd_config);
+#endif
     issd_input_configure(g_issd_config.player_profiles);
     issd_touch_set_layout(g_issd_config.touch_x, g_issd_config.touch_y, g_issd_config.touch_size);
 

@@ -168,6 +168,9 @@ void issd_config_player_preset(IssdConfig *cfg, int player, int schema);
  * only; a config file on disk always wins. */
 bool issd_config_is_steam_deck(void);
 bool issd_config_load(IssdConfig *cfg, const char *filepath);
+/* The ISS DELUXE'd presentation, applied over any saved values in a final
+ * build, which has no in-game menu to change them. */
+void issd_config_apply_final_look(IssdConfig *cfg);
 bool issd_config_save(const IssdConfig *cfg, const char *filepath);
 void issd_config_set_default_path(const char *filepath);
 const char *issd_config_get_default_path(void);
