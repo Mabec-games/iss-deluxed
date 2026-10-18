@@ -14,6 +14,8 @@ static int s_w, s_h;
  * it is found by colour: none of its colours occur in the brushstroke. */
 static uint32_t *s_brush, *s_text, *s_old;
 static int s_text_w, s_text_h;
+/* Where the lettering ends up, in box coordinates (from old_text.bmp). */
+static int s_land_x0, s_land_y0, s_land_x1, s_land_y1;
 static uint32_t s_text_colours[64];
 static int s_text_colour_count;
 /* Every colour of the lettering, including ones it shares with the
@@ -126,6 +128,15 @@ bool issd_title_logo_load(const char *mods_dir) {
             if (!in_brush && !is_text_colour(c) && s_text_colour_count < 64)
                 s_text_colours[s_text_colour_count++] = c;
         }
+        s_land_x0 = ow; s_land_y0 = oh; s_land_x1 = s_land_y1 = -1;
+        for (int y = 0; y < oh; y++)
+            for (int x = 0; x < ow; x++)
+                if ((old[y * ow + x] >> 24) && is_text_colour(old[y * ow + x])) {
+                    if (x < s_land_x0) s_land_x0 = x;
+                    if (x > s_land_x1) s_land_x1 = x;
+                    if (y < s_land_y0) s_land_y0 = y;
+                    if (y > s_land_y1) s_land_y1 = y;
+                }
         s_brush = brush; s_text = text; s_old = old; s_text_w = tw; s_text_h = th;
         brush = text = old = NULL;
     }
@@ -168,6 +179,13 @@ static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int ri
     /* Mostly brushstroke plus lettering: the title screen between the
      * stroke being painted and the ball landing. */
     if (text < 16 || (size_t)(brush + text) * 100 < (size_t)s_w * s_h * 75) return false;
+    /* Once landed the lettering never moves again, but the ball fading in
+     * above it briefly blends into lettering colours. Its left and bottom
+     * edges are unaffected, so when they sit where it lands, use the
+     * landing box rather than letting those pixels stretch it. */
+    if (s_land_x1 >= 0 && abs(bx0 - s_land_x0) <= 1 && abs(by1 - s_land_y1) <= 1) {
+        bx0 = s_land_x0; by0 = s_land_y0; bx1 = s_land_x1; by1 = s_land_y1;
+    }
     if (!changed_reset(x0, 0, right - x0, y0 + s_h)) return false;
     /* The old lettering's tiles still sit in the background beneath; keep
      * HD replacement off its whole area, not just the pixels that differ. */
