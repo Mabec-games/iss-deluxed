@@ -226,6 +226,9 @@ struct Ppu {
   // [min, max]. Used for weather drawn on the same BG3 map as the HUD.
   uint8_t wsMarginTileLayer;
   uint16_t wsMarginTileMin, wsMarginTileMax;
+  // Map rows [row0, row1] that hold those tiles. Margin scanlines outside
+  // the band borrow a row from inside it (row1 > row0; 0, 0 = off).
+  uint8_t wsMarginRow0, wsMarginRow1;
   // Optional scanline bands: clamp or cyclically repeat only [y0,y1).
   uint8_t wsClampY0[4], wsClampY1[4];
   uint8_t wsRepeatY0[4], wsRepeatY1[4];
@@ -590,6 +593,9 @@ void PpuSetWidescreenLayerClamp(Ppu *ppu, uint8_t mask);
 // [min, max] (e.g. weather on a HUD layer). layer < 0 turns it off.
 void PpuSetWidescreenMarginTiles(Ppu *ppu, int layer, uint16_t min,
                                  uint16_t max);
+// Tilemap rows [row0, row1] where those tiles live; margin scanlines on
+// other rows (a HUD band) repeat rows from inside it. 0, 0 turns it off.
+void PpuSetWidescreenMarginRows(Ppu *ppu, uint8_t row0, uint8_t row1);
 
 // Extend selected game-authored PPU windows by the current widescreen margins
 // while evaluating the selected layers. Emulated window registers are not

@@ -994,6 +994,7 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
   PpuSetWidescreenLayerRepeat(ppu,0);
   for (int l=0;l<4;l++) PpuSetWidescreenLayerClampBand(ppu,l,0,0);
   PpuSetWidescreenMarginTiles(ppu,-1,0,0);
+  PpuSetWidescreenMarginRows(ppu,0,0);
   /* Classic 4:3 takes none of the presentation branches: no VRAM/OAM
    * transaction, no supplemental sprites, no reconstructed margins. */
   if (!extra) {
@@ -1067,8 +1068,12 @@ bool issd_widescreen_begin(Ppu *ppu, const uint8_t *ram, const uint8_t *rom,
   /* Rain and snow are BG3 tiles $1F0-$1F9 scattered over the same map as
    * the HUD (whose own tiles sit just either side, $1EA-$1ED, $1FA-$1FD).
    * Let BG3 into the margins for those tiles only: the 32-column map wraps,
-   * so the weather continues across the whole screen, the HUD stays put. */
+   * so the weather continues across the whole screen, the HUD stays put.
+   * The game keeps weather to map rows 4-19, clear of the score (rows 0-3)
+   * and the name/radar panel (rows 20-26); the margins have no HUD, so
+   * there those rows repeat weather rows instead of staying empty. */
   PpuSetWidescreenMarginTiles(ppu, 2, 0x1f0, 0x1f9);
+  PpuSetWidescreenMarginRows(ppu, 4, 19);
   /* Reconstruct against the WRAM generation that produced the native OAM and
    * the currently latched scroll registers, not this frame's fresh one. */
   const uint8_t *rec = frame.ram;

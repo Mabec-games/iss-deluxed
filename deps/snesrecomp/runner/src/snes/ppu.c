@@ -205,6 +205,7 @@ bool PpuSetOverlayOamRange(Ppu *ppu, uint8_t first, uint8_t count) {
 static inline void PpuResetLayerPolicies(Ppu *ppu) {
   ppu->wsLayerClamp = 0;
   ppu->wsMarginTileLayer = 0;
+  ppu->wsMarginRow0 = ppu->wsMarginRow1 = 0;
   ppu->wsLayerMirror = 0;
   ppu->wsLayerRepeat = 0;
   memset(ppu->wsClampY0, 0, sizeof(ppu->wsClampY0));
@@ -373,6 +374,11 @@ void PpuSetWidescreenMarginTiles(Ppu *ppu, int layer, uint16_t min,
   ppu->wsMarginTileLayer = layer >= 0 && layer < 4 ? (uint8_t)(layer + 1) : 0;
   ppu->wsMarginTileMin = min;
   ppu->wsMarginTileMax = max;
+}
+
+void PpuSetWidescreenMarginRows(Ppu *ppu, uint8_t row0, uint8_t row1) {
+  ppu->wsMarginRow0 = row0;
+  ppu->wsMarginRow1 = row1;
 }
 
 void PpuSetWidescreenWindowExpansion(Ppu *ppu, uint8_t layer_mask,
@@ -1316,6 +1322,18 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
   };
   int tileadr = PPU_bgTileAdr(ppu, layer), pixel;
   int tileadr1 = tileadr + 7 - (y & 0x7), tileadr0 = tileadr + (y & 0x7);
+  // Margin spans on rows outside the band borrow a row from inside it.
+  const uint16 *tps_margin[2] = { tps[0], tps[1] };
+  if (margin_filter && ppu->wsMarginRow1 > ppu->wsMarginRow0) {
+    int row = (y >> 3) & 0x1f, row0 = ppu->wsMarginRow0;
+    int band = ppu->wsMarginRow1 - row0 + 1;
+    if (row < row0 || row >= row0 + band) {
+      int src = row0 + ((row - row0) % band + band) % band;
+      int offs = PPU_bgTilemapAdr(ppu, layer) + (src << 5);
+      tps_margin[0] = &ppu->vram[offs & 0x7fff];
+      tps_margin[1] = &ppu->vram[offs + (PPU_bgTilemapWider(ppu, layer) ? 0x400 : 0) & 0x7fff];
+    }
+  }
 
   const uint16 *addr;
   for (size_t windex = 0; windex < win.nr; windex++) {
@@ -1323,14 +1341,15 @@ static void PpuDrawBackground_2bpp(Ppu *ppu, PpuPixelPrioBufs *dstbuf, uint y, b
       continue;  // layer is disabled for this window part
     const bool filter = margin_filter &&
         (win.edges[windex] < 0 || win.edges[windex] >= 256);
+    const uint16 *const *span_tps = filter ? tps_margin : tps;
 #define TILE_SHOWN(tile) (!filter || ((tile) & 0x3ff) >= ppu->wsMarginTileMin && \
                                      ((tile) & 0x3ff) <= ppu->wsMarginTileMax)
     uint x = win.edges[windex] + ppu->hScroll[layer] + ws_bias[windex];
     uint w = win.edges[windex + 1] - win.edges[windex];
     PpuZbufType *dstz = dstbuf->data + win.edges[windex] + kPpuExtraLeftRight;
-    const uint16 *tp = tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
-    const uint16 *tp_last = tps[x >> 8 & 1] + 31;
-    const uint16 *tp_next = tps[(x >> 8 & 1) ^ 1];
+    const uint16 *tp = span_tps[x >> 8 & 1] + ((x >> 3) & 0x1f);
+    const uint16 *tp_last = span_tps[x >> 8 & 1] + 31;
+    const uint16 *tp_next = span_tps[(x >> 8 & 1) ^ 1];
 
 #define NEXT_TP() if (tp != tp_last) tp += 1; else tp = tp_next, tp_next = tp_last - 31, tp_last = tp + 31;
     // Handle clipped pixels on left side
