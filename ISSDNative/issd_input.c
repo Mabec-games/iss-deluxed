@@ -1,7 +1,10 @@
 #include "issd_input.h"
 
+#include <string.h>
+
 static SDL_GameController *s_controllers[ISSD_LOCAL_PLAYERS];
 static uint64_t s_blocked[ISSD_LOCAL_PLAYERS];
+static Uint32 s_added_ms[ISSD_LOCAL_PLAYERS];
 static bool s_focused = true;
 static const IssdPlayerProfile *s_profiles;
 
@@ -50,12 +53,23 @@ int issd_input_add(int device_index) {
     if (instance < 0 || !SDL_IsGameController(device_index)) return -1;
     int existing = issd_input_player(instance);
     if (existing >= 0) return existing;
+    /* A controller that reconnects (a wireless dongle waking up or changing
+     * mode) can arrive before its old connection is reported gone. Free
+     * slots whose controller has already detached, so it takes Player 1
+     * again rather than the next slot. */
+    for (int i = 0; i < ISSD_LOCAL_PLAYERS; i++)
+        if (s_controllers[i] && !SDL_GameControllerGetAttached(s_controllers[i])) {
+            SDL_GameControllerClose(s_controllers[i]);
+            s_controllers[i] = NULL;
+            s_blocked[i] = 0;
+        }
     for (int i = 0; i < ISSD_LOCAL_PLAYERS; i++) {
         if (s_controllers[i]) continue;
         SDL_GameController *pad = SDL_GameControllerOpen(device_index);
         if (!pad) return -1;
         s_controllers[i] = pad;
         s_blocked[i] = raw_controls(i);
+        s_added_ms[i] = SDL_GetTicks();
         SDL_GameControllerSetPlayerIndex(pad, i);
         return i;
     }
@@ -65,9 +79,27 @@ int issd_input_add(int device_index) {
 int issd_input_remove(SDL_JoystickID instance) {
     int player = issd_input_player(instance);
     if (player < 0) return -1;
+    const SDL_JoystickGUID guid = SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(s_controllers[player]));
+    const Uint32 removed_added = s_added_ms[player];
     SDL_GameControllerClose(s_controllers[player]);
     s_controllers[player] = NULL;
     s_blocked[player] = 0;
+    /* The same reconnect, the other way round: the same model of controller
+     * took a higher slot moments before the old connection went. Move it
+     * back down. Controllers connected together, or long before, never move. */
+    for (int i = player + 1; i < ISSD_LOCAL_PLAYERS; i++) {
+        if (!s_controllers[i] || SDL_GetTicks() - s_added_ms[i] > 3000 ||
+            (Sint32)(s_added_ms[i] - removed_added) < 1000) continue;
+        const SDL_JoystickGUID other = SDL_JoystickGetGUID(SDL_GameControllerGetJoystick(s_controllers[i]));
+        if (memcmp(&guid, &other, sizeof guid) != 0) continue;
+        s_controllers[player] = s_controllers[i];
+        s_blocked[player] = s_blocked[i];
+        s_added_ms[player] = s_added_ms[i];
+        s_controllers[i] = NULL;
+        s_blocked[i] = 0;
+        SDL_GameControllerSetPlayerIndex(s_controllers[player], player);
+        break;
+    }
     return player;
 }
 

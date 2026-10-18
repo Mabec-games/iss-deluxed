@@ -1739,7 +1739,14 @@ static void ProcessInputEvent(const SDL_Event *ev) {
         }
     } else if (ev->type == SDL_CONTROLLERDEVICEREMOVED) {
         int player = issd_input_remove(ev->cdevice.which);
-        if (player >= 0) {
+        if (player >= 0 && (issd_input_connected() & (1u << player))) {
+            /* The same controller came back in a new connection and kept
+             * its place; nothing to pause for. */
+            char message[64];
+            snprintf(message, sizeof(message), "Controller reconnected: Player %d", player + 1);
+            printf("[Input] %s\n", message);
+            issd_menu_notify(message, 180);
+        } else if (player >= 0) {
             char message[64];
             snprintf(message, sizeof(message), "Player %d controller disconnected", player + 1);
             printf("[Input] %s\n", message);
