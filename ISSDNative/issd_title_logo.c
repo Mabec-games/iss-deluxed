@@ -4,11 +4,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Top-left of the logo box in the authentic 256-pixel view. */
-enum { LOGO_X = 18, LOGO_Y = 26 };
+/* Top-left of the logo box and the bottom credit line in the authentic
+ * 256-pixel view (tools/build_title_logo.py, tools/build_title_credit.py). */
+enum { LOGO_X = 18, LOGO_Y = 26, CREDIT_X = 8, CREDIT_Y = 203 };
 
 static uint32_t *s_logo, *s_reference;
 static int s_w, s_h;
+/* The credit lines under the photos, swapped the same way. */
+static uint32_t *s_credit, *s_credit_reference;
+static int s_credit_w, s_credit_h;
 
 /* The lettering flies in as a scaled sprite over a still brushstroke, so
  * it is found by colour: none of its colours occur in the brushstroke. */
@@ -88,11 +92,30 @@ done:
     return px;
 }
 
+static void load_credit(const char *mods_dir) {
+    char path[1024];
+    int cw = 0, ch = 0, rw = 0, rh = 0;
+    free(s_credit); free(s_credit_reference);
+    s_credit = s_credit_reference = NULL;
+    snprintf(path, sizeof path, "%s/title_logo/credit.bmp", mods_dir);
+    uint32_t *credit = load_bmp(path, &cw, &ch);
+    snprintf(path, sizeof path, "%s/title_logo/credit_reference.bmp", mods_dir);
+    uint32_t *reference = load_bmp(path, &rw, &rh);
+    if (credit && reference && cw == rw && ch == rh &&
+        CREDIT_X + cw <= 256 && CREDIT_Y + ch <= 224) {
+        s_credit = credit; s_credit_reference = reference;
+        s_credit_w = cw; s_credit_h = ch;
+        return;
+    }
+    free(credit); free(reference);
+}
+
 bool issd_title_logo_load(const char *mods_dir) {
     free(s_logo); free(s_reference); free(s_brush); free(s_text); free(s_old);
     s_logo = s_reference = s_brush = s_text = s_old = NULL;
     s_w = s_h = s_text_w = s_text_h = s_text_colour_count = s_old_colour_count = 0;
     if (!mods_dir || !mods_dir[0]) return false;
+    load_credit(mods_dir);
     char path[1024];
     int lw = 0, lh = 0, rw = 0, rh = 0;
     snprintf(path, sizeof path, "%s/title_logo/logo.bmp", mods_dir);
@@ -186,11 +209,10 @@ static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int ri
     if (s_land_x1 >= 0 && abs(bx0 - s_land_x0) <= 1 && abs(by1 - s_land_y1) <= 1) {
         bx0 = s_land_x0; by0 = s_land_y0; bx1 = s_land_x1; by1 = s_land_y1;
     }
-    if (!changed_reset(x0, 0, right - x0, y0 + s_h)) return false;
     /* The old lettering's tiles still sit in the background beneath; keep
      * HD replacement off its whole area, not just the pixels that differ. */
     for (int y = by0; y <= by1; y++)
-        memset(s_changed + (size_t)(y0 + y) * s_cw + bx0, 1, (size_t)(bx1 - bx0 + 1));
+        memset(s_changed + (size_t)(y0 + y) * s_cw + x0 + bx0, 1, (size_t)(bx1 - bx0 + 1));
     for (int y = by0; y <= by1; y++) {
         uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
         for (int x = bx0; x <= bx1; x++)
@@ -220,32 +242,24 @@ static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int ri
     return true;
 }
 
-bool issd_title_logo_apply(uint32_t *frame, int width, int height, int margin_left,
-                           int *box_x, int *box_y, int *box_w, int *box_h,
-                           const uint8_t **changed) {
-    if (!s_logo || !frame) return false;
+/* Frames that do not match a reference near-exactly are the animation, a
+ * fade or another screen, and are left alone. */
+static bool matches(const uint32_t *frame, int width, int x0, int y0,
+                    const uint32_t *ref, int w, int h) {
+    size_t same = 0, total = (size_t)w * h;
+    for (int y = 0; y < h; y++) {
+        const uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
+        for (int x = 0; x < w; x++) same += ((row[x] ^ ref[(size_t)y * w + x]) & 0xFFFFFFu) == 0;
+    }
+    return same * 100 >= total * 97;
+}
+
+static bool apply_logo(uint32_t *frame, int width, int height, int margin_left) {
+    if (!s_logo) return false;
     const int x0 = margin_left + LOGO_X, y0 = LOGO_Y;
     if (x0 < 0 || x0 + s_w > width || y0 + s_h > height) return false;
-    /* Only the finished logo, at full brightness: anything less than a
-     * near-exact match is the animation, a fade or another screen. */
-    size_t same = 0, total = (size_t)s_w * s_h;
-    for (int y = 0; y < s_h; y++) {
-        const uint32_t *row = frame + (size_t)(y0 + y) * width + x0;
-        const uint32_t *ref = s_reference + (size_t)y * s_w;
-        for (int x = 0; x < s_w; x++)
-            same += ((row[x] ^ ref[x]) & 0xFFFFFFu) == 0;
-    }
-    if (same * 100 < total * 97) {
-        const int right = width;   /* widescreen shows the lettering entering beyond 256 */
-        if (!replace_lettering(frame, width, x0, y0, right)) return false;
-        if (box_x) *box_x = x0;
-        if (box_y) *box_y = 0;
-        if (box_w) *box_w = right - x0;
-        if (box_h) *box_h = y0 + s_h;
-        if (changed) *changed = s_changed;
-        return true;
-    }
-    if (!changed_reset(x0, y0, s_w, s_h)) return false;
+    if (!matches(frame, width, x0, y0, s_reference, s_w, s_h))
+        return replace_lettering(frame, width, x0, y0, width);  /* fly-in reaches the margin */
     for (int y = 0; y < s_h; y++) {
         const uint32_t *src = s_logo + (size_t)y * s_w;
         for (int x = 0; x < s_w; x++)
@@ -253,11 +267,35 @@ bool issd_title_logo_apply(uint32_t *frame, int width, int height, int margin_le
     }
     if (s_old)                      /* the old lettering's tiles, as above */
         for (int i = 0; i < s_w * s_h; i++)
-            if (s_old[i] >> 24) s_changed[i] = 1;
-    if (box_x) *box_x = x0;
-    if (box_y) *box_y = y0;
-    if (box_w) *box_w = s_w;
-    if (box_h) *box_h = s_h;
+            if (s_old[i] >> 24) s_changed[(size_t)(y0 + i / s_w) * s_cw + x0 + i % s_w] = 1;
+    return true;
+}
+
+static bool apply_credit(uint32_t *frame, int width, int height, int margin_left) {
+    if (!s_credit) return false;
+    const int x0 = margin_left + CREDIT_X, y0 = CREDIT_Y;
+    if (x0 < 0 || x0 + s_credit_w > width || y0 + s_credit_h > height) return false;
+    if (!matches(frame, width, x0, y0, s_credit_reference, s_credit_w, s_credit_h)) return false;
+    for (int y = 0; y < s_credit_h; y++)
+        for (int x = 0; x < s_credit_w; x++) {
+            const uint32_t c = s_credit[(size_t)y * s_credit_w + x];
+            if (c >> 24) put(frame, width, x0 + x, y0 + y, c);
+        }
+    return true;
+}
+
+bool issd_title_logo_apply(uint32_t *frame, int width, int height, int margin_left,
+                           int *box_x, int *box_y, int *box_w, int *box_h,
+                           const uint8_t **changed) {
+    if (!frame || (!s_logo && !s_credit)) return false;
+    if (!changed_reset(0, 0, width, height)) return false;
+    bool drawn = apply_logo(frame, width, height, margin_left);
+    drawn |= apply_credit(frame, width, height, margin_left);
+    if (!drawn) return false;
+    if (box_x) *box_x = 0;
+    if (box_y) *box_y = 0;
+    if (box_w) *box_w = width;
+    if (box_h) *box_h = height;
     if (changed) *changed = s_changed;
     return true;
 }
