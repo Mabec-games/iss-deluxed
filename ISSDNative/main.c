@@ -2415,7 +2415,7 @@ int main(int argc, char **argv) {
 #endif
 
         g_window = SDL_CreateWindow(
-            "ISS DELUXE'd — International Superstar Soccer Deluxe",
+            "ISS DELUXE'd - International Superstar Soccer Deluxe",
             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
             win_w, win_h,
             win_flags
