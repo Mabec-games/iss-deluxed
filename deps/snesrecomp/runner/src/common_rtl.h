@@ -285,6 +285,8 @@ void RtlSetAudioOutputRate(int freq);
 /* Optional host backpressure, invoked on the game thread outside the APU lock.
  * Hosts without an active realtime consumer leave this unset. */
 void RtlAudioSetProducerWait(void (*wait)(void));
+/* Called before each acknowledged sound command (port, value) is written. */
+void RtlApuSetCommandHook(void (*hook)(uint8 port, uint16 val));
 /* Notify the shared audio runner of host fast-forward state. Guest-frame SPC
  * synchronization is automatic inside RtlRunFrame; clients only supply the
  * presentation policy needed to discard stale PCM after fast-forward. */

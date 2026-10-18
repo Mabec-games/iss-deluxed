@@ -2070,6 +2070,31 @@ static void ProcessMenuTouchPad(void) {
 #if defined(__ANDROID__) || defined(ISSD_ANDROID)
 DECLSPEC int SDL_main(int argc, char **argv) {
 #else
+/* Frames since either player last pressed anything. */
+static uint32_t g_input_idle_frames;
+
+/* At the end of the intro the game stops the song (command $EF) to load the
+ * title music, cutting it mid-phrase. When that happens on its own, with
+ * music playing and nobody pressing buttons, let the song run about 0.3 s
+ * longer first; the screen holds on the white flash meanwhile. */
+static void IssdApuCommandHook(uint8 port, uint16 val) {
+    if (port != 0 || (val & 0xff) != 0xEF || !g_audio_producer_wait_enabled || g_input_idle_frames < 120)
+        return;
+#ifdef SNESRECOMP_NET
+    if (g_net_mode) return;
+#endif
+    RtlApuLock();
+    bool audible = !IssdAudioQueueSilent(g_snes->apu->dsp);
+    RtlApuUnlock();
+    if (!audible) return;
+    for (int frame = 0; frame < 18; frame++) {
+        RtlApuLock();
+        for (int cycle = 0; cycle < 17088; cycle++) apu_cycle(g_snes->apu);
+        RtlApuUnlock();
+        IssdWaitForAudioProducer();
+    }
+}
+
 int main(int argc, char **argv) {
 #endif
     g_argc = argc; g_argv = argv;
@@ -2493,6 +2518,7 @@ int main(int argc, char **argv) {
         if (audio_dev) {
             RtlSetAudioOutputRate(obtained_spec.freq);
             RtlAudioSetProducerWait(IssdWaitForAudioProducer);
+            RtlApuSetCommandHook(IssdApuCommandHook);
             g_audio_producer_wait_enabled = true;
             g_audio_frames_per_block = (534 * obtained_spec.freq + 32040 / 2) / 32040;
             s_audio_block_avail = 0;
@@ -2843,6 +2869,7 @@ int main(int argc, char **argv) {
                     connected = 3;
                 }
 #endif
+                g_input_idle_frames = (pads[0] | pads[1]) ? 0 : g_input_idle_frames + 1;
                 RtlRunFrameControllers(pads, connected, true);
 #ifdef SNESRECOMP_NET
                 if (g_net_mode) {

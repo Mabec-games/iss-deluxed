@@ -1230,6 +1230,12 @@ void RtlAudioSetProducerWait(void (*wait)(void)) {
   g_audio_producer_wait = wait;
 }
 
+static void (*g_apu_command_hook)(uint8 port, uint16 val);
+
+void RtlApuSetCommandHook(void (*hook)(uint8 port, uint16 val)) {
+  g_apu_command_hook = hook;
+}
+
 static void rtl_audio_wait_for_consumer(void) {
   if (!g_audio_fast_forward && g_audio_producer_wait)
     g_audio_producer_wait();
@@ -1286,6 +1292,9 @@ void RtlApuWrite(uint16 adr, uint8 val) {
 bool RtlApuWriteWaitEcho(CpuState *cpu, uint16 adr, uint16 val, bool wide) {
   assert(adr >= APUI00 && adr <= APUI03);
   uint8_t port = (uint8_t)(adr & 3);
+  /* Lets the host act before a sound command reaches the SPC. */
+  if (g_apu_command_hook)
+    g_apu_command_hook(port, val);
 
   /* Bulk sound transfers advance SPC beyond one frame. Give the realtime
    * consumer room before the next burst, outside its required APU mutex. */
