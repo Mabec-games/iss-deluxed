@@ -244,6 +244,8 @@ static void handle_packet(uint8_t type, const uint8_t *p, size_t len) {
             n += put_string(body + n, S.inbox);
             body[n++] = 0;                          /* QoS 0 */
             mqtt_packet(0x82, body, n);
+        } else {
+            close_socket();                         /* refused: the pump tries the next */
         }
         break;
     case 9:                                         /* SUBACK */
@@ -267,8 +269,13 @@ static void read_socket(void) {
         int r = (int)recv(S.fd, (char *)S.rx + S.rx_len, (int)(sizeof S.rx - S.rx_len), 0);
         if (r > 0) { S.rx_len += (size_t)r; continue; }
         if (r == 0 || !sock_would_block(sock_error())) {
+            /* Before sign-in this is a broker turning us away (HiveMQ's
+             * public broker has accepted TCP and then closed it): the pump
+             * moves on to the next one. Afterwards the connection is lost. */
+            const bool signed_in = S.ready;
             close_socket();
-            snprintf(S.error, sizeof S.error, "Lost the connection to the matchmaking service.");
+            if (signed_in)
+                snprintf(S.error, sizeof S.error, "Lost the connection to the matchmaking service.");
         }
         break;
     }
@@ -283,6 +290,7 @@ static void read_socket(void) {
         size_t head = i + 1;
         if (S.rx_len < head + len) return;
         handle_packet(S.rx[0], S.rx + head, len);
+        if (S.fd == BAD_SOCK) return;               /* closed while handling it */
         memmove(S.rx, S.rx + head + len, S.rx_len - head - len);
         S.rx_len -= head + len;
     }
@@ -331,6 +339,7 @@ void issd_signal_pump(void) {
             socklen_t l = sizeof err;
             getsockopt(S.fd, SOL_SOCKET, SO_ERROR, (char *)&err, &l);
             if (err == 0) { S.started = 0; send_connect(); }
+            else close_socket();                        /* refused or unreachable */
         } else if (now - S.started > CONNECT_MS) {
             close_socket();
         }
@@ -344,6 +353,11 @@ void issd_signal_pump(void) {
         if (S.started) return;
     }
     read_socket();
+    if (S.fd == BAD_SOCK && !S.error[0]) {      /* turned away: try the next broker */
+        S.broker++;
+        if (!start_broker()) S.open = false;
+        return;
+    }
     if (S.ready && now - S.last_ping > PING_MS) {
         mqtt_packet(0xC0, NULL, 0);
         S.last_ping = now;
