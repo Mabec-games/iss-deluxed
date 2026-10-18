@@ -11,7 +11,6 @@
 - **Online play:** HOST shows an invite code (such as `EU-TIGER-482913`), JOIN with that code. Peer to peer, no account, no login, nobody sees or types an IP address.
 - **True pixel-perfect widescreen:** *Fit Pixel Perfect* picks the widest sharp widescreen view for your screen (full width at 1080p). Corner fences and announcement banners fixed in widescreen.
 - **Launcher:** ROM selection (only the exact USA ROM is accepted), options and controls before the game starts. No in-game menu needed.
-- **New MABECS title logo** that flies in like the original.
 - **Enhanced animation** for running and walking, applied to every player.
 - **Linux AppImage** for Debian 12+, Ubuntu 22.04+, Fedora 35+ and similar.
 
