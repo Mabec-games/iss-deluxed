@@ -2,24 +2,39 @@
 
 # ISS DELUXE'd
 
-> **Fork notice:** ISS DELUXE'd is a non-commercial community fork of [ISSD Native](https://github.com/sergiomanzur/issd-native) by sergiomanzur. It is developed and tested on **Linux only**.
+> **Fork notice:** ISS DELUXE'd is a non-commercial community fork of [ISSD Native](https://github.com/sergiomanzur/issd-native) by sergiomanzur. It is developed and tested on **Linux and Windows**.
 
-**[Download the Linux AppImage (beta)](https://github.com/Mabec-games/iss-deluxed/releases)**: you supply your own International Superstar Soccer Deluxe (USA) ROM.
+**[Download ISS DELUXE'd 1.0 for Windows or Linux](https://github.com/Mabec-games/iss-deluxed/releases/latest)**: you supply your own International Superstar Soccer Deluxe (USA) ROM.
 
 ## What ISS DELUXE'd adds
 
-- **Online play:** HOST shows an invite code (such as `EU-TIGER-482913`), JOIN with that code. Peer to peer, no account, no login, nobody sees or types an IP address.
+- **Online play, Windows and Linux together:** HOST shows an invite code (such as `EU-TIGER-482913`), JOIN with that code. Peer to peer, no account, no login, nobody sees or types an IP address. See [Online play](#online-play).
 - **True pixel-perfect widescreen:** *Fit Pixel Perfect* picks the widest sharp widescreen view for your screen (full width at 1080p). Corner fences and announcement banners fixed in widescreen.
 - **Launcher:** ROM selection (only the exact USA ROM is accepted), options and controls before the game starts. No in-game menu needed.
 - **Enhanced animation** for running and walking, applied to every player.
-- **Linux AppImage** for Debian 12+, Ubuntu 22.04+, Fedora 35+ and similar.
+- **Windows build** (Windows 10/11, 64-bit; unzip and run `ISS DELUXEd.exe`) and **Linux AppImage** (Debian 12+, Ubuntu 22.04+, Fedora 35+ and similar).
 
 <p align="center"><img src="docs/images/title.png" width="49%"> <img src="docs/images/gameplay.png" width="49%"></p>
+
+## Online play
+
+1. Both players open the game and choose **ONLINE**.
+2. One player chooses **HOST** and sends the invite code shown (such as `EU-TIGER-482913`) to the other player any way they like.
+3. The other player chooses **JOIN** and types the code. The host is Player 1 and the host's settings are used; pick the two-player option in the game's menus for a 1-on-1 match.
+
+The games find each other through free public message services (emqx, mosquitto, HiveMQ), encrypted with the invite code as the key, then connect directly to each other. Only button presses travel between the players and both games run the same match in lockstep. The code's first letters show the host's rough region (EU, NA, SA, ASIA, AF, OCE or WORLD), taken from the computer's time zone.
+
+Windows and Linux players can play each other, but **both players need the same release**: builds from different versions refuse to connect.
+
+Online play has a life of its own:
+- A weak connection or a weak PC makes the game stutter for both players, and the sound may lag behind or crackle. The slower side sets the pace.
+- If a player drops out mid-match, the match freezes and both players have to restart the game.
+- There is no relay server, so players behind very strict routers or carrier-grade NAT may not be able to connect.
 
 
 A native recompilation and modernization of **International Superstar Soccer Deluxe (USA)** for the Super Nintendo. The original 65816 code is translated into C, with native replacements for asset decompression, memory streaming, and audio command handling. The runner retains SNES hardware models for video, audio, and other peripherals.
 
-The goal is to preserve the original gameplay while adding modern controls, presentation options, saves, and editable mod packs. This is a **beta project working toward 1.0**; recompilation coverage does not establish complete gameplay or hardware fidelity.
+The goal is to preserve the original gameplay while adding modern controls, presentation options, saves, and editable mod packs. ISS DELUXE'd has reached **1.0**; recompilation coverage still does not establish complete gameplay or hardware fidelity.
 
 ISS DELUXE'd is a WIP.
 
@@ -34,15 +49,15 @@ Project metadata for [recomp.board](https://recomp.fyi) and other tools lives in
 
 ## Current platforms
 
-ISS DELUXE'd supports **Linux x86-64 only**. The other platforms' code is
-inherited unchanged from upstream ISSD Native. It is not built or tested in this
-fork, and no support is offered for it. It may still work if you build it
-yourself.
+ISS DELUXE'd supports **Linux x86-64 and Windows x86-64**, and the two play
+each other online. The other platforms' code is inherited unchanged from
+upstream ISSD Native. It is not built or tested in this fork, and no support is
+offered for it. It may still work if you build it yourself.
 
 | Platform | ISS DELUXE'd | Upstream ISSD Native |
 | --- | --- | --- |
-| Linux x86-64 | **Supported.** Built and tested with CMake and system SDL2 (CachyOS/Arch). | Release archive; tested under Ubuntu 24.04. |
-| Windows x86-64 | Not supported; inherited code, untested. | Release packages; main development and test platform. |
+| Linux x86-64 | **Supported.** AppImage built in a Debian 12 root; developed on CachyOS/Arch. | Release archive; tested under Ubuntu 24.04. |
+| Windows x86-64 | **Supported.** Zip built with clang-cl (Visual Studio 2022 Build Tools) and SDL2; tested on Windows 11, including online play against Linux. | Release packages; main development and test platform. |
 | Android 8.0+ | Not supported; inherited code, untested. | APK releases (`arm64-v8a`, `x86_64`), debug-signed for sideloading. |
 | SteamOS / Steam Deck | Not supported; inherited code, untested. | Build target using the Steam Linux Runtime 3.0 “sniper” SDK. |
 | macOS / iOS | Not supported. | No port. |
@@ -176,7 +191,16 @@ cd iss-deluxed
 
 ### Windows
 
-Use an x64 Visual Studio developer shell or a configured Clang toolchain. Point CMake at your SDL2 development installation:
+The release build uses Visual Studio 2022 (or its Build Tools) with the C++ Clang tools, Git, Python 3, Ninja and the SDL2 VC development package (`SDL2-devel-2.x-VC.zip`, unpacked to `..\win-deps\SDL2-2.30.9` beside the clone or pointed to by `SDL2_DIR`):
+
+```powershell
+tools\build_windows.cmd
+& "C:\Program Files\Git\bin\sh.exe" tools/make_windows_zip.sh
+```
+
+This produces `dist/ISS_DELUXEd-windows-x64.zip`. Online play only connects builds made from the same commit, so build Windows and the Linux AppImage from the same commit.
+
+For a plain developer build, use an x64 Visual Studio developer shell or a configured Clang toolchain and point CMake at your SDL2 development installation:
 
 ```powershell
 cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:/path/to/SDL2"
