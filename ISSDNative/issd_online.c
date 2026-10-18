@@ -5,7 +5,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#ifndef _WIN32
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#else
 #include <unistd.h>
 #endif
 
@@ -43,13 +46,35 @@ static void fail(const char *message) {
     s_state = ISSD_ONLINE_FAILED;
 }
 
+#ifdef _WIN32
+/* Windows names its zones "W. Europe Standard Time"; the ICU that ships with
+ * Windows 10 1903+ reports the current one as an IANA name ("Europe/Berlin").
+ * Loaded at run time, so older Windows just falls back to WORLD. */
+static void windows_zone(char *out, size_t size) {
+    typedef int32_t (__cdecl *GetDefaultTimeZone)(uint16_t *result, int32_t capacity, int *status);
+    HMODULE icu = LoadLibraryExA("icu.dll", NULL, LOAD_LIBRARY_SEARCH_SYSTEM32);
+    if (!icu) return;
+    GetDefaultTimeZone get = (GetDefaultTimeZone)(void *)GetProcAddress(icu, "ucal_getDefaultTimeZone");
+    uint16_t name[128];
+    int status = 0;                                 /* U_ZERO_ERROR; > 0 is a failure */
+    int32_t n = get ? get(name, 127, &status) : 0;
+    if (status <= 0 && n > 0 && (size_t)n < size) {
+        for (int32_t i = 0; i < n; i++) out[i] = name[i] < 128 ? (char)name[i] : '?';
+        out[n] = '\0';
+    }
+    FreeLibrary(icu);
+}
+#endif
+
 /* A rough region from the computer's time zone, shown in front of the code
  * so the guest knows what lag to expect. Nothing is looked up online. */
 static const char *region(void) {
     char zone[128] = "";
     const char *tz = getenv("TZ");
     if (tz && tz[0]) snprintf(zone, sizeof zone, "%s", tz[0] == ':' ? tz + 1 : tz);
-#ifndef _WIN32
+#ifdef _WIN32
+    if (!zone[0]) windows_zone(zone, sizeof zone);
+#else
     if (!zone[0]) {
         char link[256];
         ssize_t n = readlink("/etc/localtime", link, sizeof link - 1);
