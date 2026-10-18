@@ -98,6 +98,15 @@ static bool g_audio_producer_wait_enabled;
 static bool g_audio_producer_stalled;
 static uint32_t g_audio_producer_stalled_read;
 
+/* True when every queued sample is (near) zero. Caller holds the APU lock. */
+static bool IssdAudioQueueSilent(const Dsp *dsp) {
+    for (uint32_t i = dsp->sampleRead; i != dsp->sampleWrite; i++) {
+        uint32_t idx = i & (DSP_SAMPLE_RING - 1);
+        if (abs(dsp->sampleBuffer[idx * 2]) > 2 || abs(dsp->sampleBuffer[idx * 2 + 1]) > 2) return false;
+    }
+    return true;
+}
+
 static void IssdWaitForAudioProducer(void) {
     if (!g_audio_producer_wait_enabled || !g_snes || !g_snes->apu) return;
     /* Keep half the native FIFO free for a bounded SPC acknowledgement or
@@ -107,6 +116,14 @@ static void IssdWaitForAudioProducer(void) {
         RtlApuLock();
         uint32_t queued = dsp_available(g_snes->apu->dsp);
         uint32_t read = g_snes->apu->dsp->sampleRead;
+        if (queued >= 4096 && IssdAudioQueueSilent(g_snes->apu->dsp)) {
+            /* The sound CPU is busy with a bulk transfer (a new song being
+             * loaded) and makes nothing but silence. Skip that silence rather
+             * than holding the game to real time for it: the title music
+             * otherwise starts a second late with the screen frozen. */
+            g_snes->apu->dsp->sampleRead = g_snes->apu->dsp->sampleWrite - 2048;
+            queued = 2048;
+        }
         RtlApuUnlock();
         if (queued < 4096) {
             g_audio_producer_stalled = false;

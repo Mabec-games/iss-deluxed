@@ -203,8 +203,10 @@ static bool replace_lettering(uint32_t *frame, int width, int x0, int y0, int ri
         }
     }
     /* Mostly brushstroke plus lettering: the title screen between the
-     * stroke being painted and the ball landing. */
-    if (text < 16 || (size_t)(brush + text) * 100 < (size_t)s_w * s_h * 75) return false;
+     * stroke being painted and the ball landing. The stroke always shows
+     * more than the lettering covers; a plain white screen (the KONAMI
+     * scene, the flash before the title) is all "lettering" and no stroke. */
+    if (text < 16 || brush < text || (size_t)(brush + text) * 100 < (size_t)s_w * s_h * 75) return false;
     /* Once landed the lettering never moves again, but the ball fading in
      * above it briefly blends into lettering colours. Its left and bottom
      * edges are unaffected, so when they sit where it lands, use the
