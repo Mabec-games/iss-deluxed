@@ -106,7 +106,6 @@ void issd_config_init_defaults(IssdConfig *cfg) {
     cfg->true_widescreen = true;
     cfg->widescreen_menus = true;
     cfg->enhanced_running_animation = true;
-    cfg->ball_shadow = true;
     cfg->crt_strength = 100;
     cfg->radar_scale = 1;
     cfg->hud_scale = 1;
@@ -485,7 +484,6 @@ void issd_config_apply_final_look(IssdConfig *cfg) {
     cfg->widescreen_menus = true;
     cfg->scaling_filter = ISSD_FILTER_NEAREST;
     cfg->enhanced_running_animation = true;
-    cfg->ball_shadow = true;
     cfg->camera_mode = ISSD_CAMERA_CLASSIC;
     cfg->color_boost = false;
     snprintf(cfg->hd_texture_packs, sizeof(cfg->hd_texture_packs), "%s", "title_screen_hd");
